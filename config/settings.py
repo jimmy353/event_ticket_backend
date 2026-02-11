@@ -24,14 +24,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-2mzl&3%utc+we6cljiv#q8$km+k*(%^^b2i@$i_q^m92&4qp=p'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = [
-    "127.0.0.1",
-    "localhost",
-    "192.168.0.143",
-    "*",
-]
+ALLOWED_HOSTS = ["*"]
 
 
 # Application definition
@@ -66,6 +61,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
      "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -169,3 +165,6 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 AUTO_PAYOUT_ON_STARTUP = True
 
+
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
