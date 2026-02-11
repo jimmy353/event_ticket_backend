@@ -29,6 +29,7 @@ DEBUG = False
 ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
+    "sirheartevents.onrender.com",
     "sirheartevents-onrender-com.onrender.com",
     ".onrender.com",
 ]
@@ -169,6 +170,7 @@ SIMPLE_JWT = {
 
 
 CSRF_TRUSTED_ORIGINS = [
+    "https://sirheartevents.onrender.com",
     "https://sirheartevents-onrender-com.onrender.com",
 ]
 
