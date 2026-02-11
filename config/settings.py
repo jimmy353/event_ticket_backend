@@ -26,7 +26,12 @@ SECRET_KEY = 'django-insecure-2mzl&3%utc+we6cljiv#q8$km+k*(%^^b2i@$i_q^m92&4qp=p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "sirheartevents-onrender-com.onrender.com",
+    ".onrender.com",
+]
 
 
 # Application definition
@@ -71,7 +76,9 @@ MIDDLEWARE = [
 
 ]
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "https://sirheartevents-onrender-com.onrender.com",
+]
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -159,6 +166,11 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://sirheartevents-onrender-com.onrender.com",
+]
 
 
 MEDIA_URL = "/media/"
