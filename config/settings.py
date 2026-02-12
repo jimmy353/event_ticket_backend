@@ -30,10 +30,6 @@ ALLOWED_HOSTS = [
     "www.sirheartevents.com",
     "api.sirheartevents.com",
     "sirheartevents.onrender.com",
-    "sirheartevents-onrender-com.onrender.com",
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
 ]
 
 
@@ -221,7 +217,6 @@ CSRF_TRUSTED_ORIGINS = [
     "https://www.sirheartevents.com",
     "https://api.sirheartevents.com",
     "https://sirheartevents.onrender.com",
-    "https://sirheartevents-onrender-com.onrender.com",
 ]
 
 

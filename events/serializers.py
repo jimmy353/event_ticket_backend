@@ -4,10 +4,7 @@ from .models import Event
 
 class EventListSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
-    organizer_name = serializers.CharField(
-        source="organizer.email",
-        read_only=True
-    )
+    organizer_name = serializers.CharField(source="organizer.email", read_only=True)
 
     class Meta:
         model = Event
@@ -26,12 +23,13 @@ class EventListSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         request = self.context.get("request")
         if obj.image and request:
-            return request.build_absolute_uri(obj.image.url)
+            url = request.build_absolute_uri(obj.image.url)
+            return url.replace("http://", "https://")
         return None
 
 
 class OrganizerEventSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField()
+    image = serializers.Serializer.MethodField()
 
     class Meta:
         model = Event
@@ -47,7 +45,8 @@ class OrganizerEventSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         request = self.context.get("request")
         if obj.image and request:
-            return request.build_absolute_uri(obj.image.url)
+            url = request.build_absolute_uri(obj.image.url)
+            return url.replace("http://", "https://")
         return None
 
 
