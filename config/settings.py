@@ -224,6 +224,8 @@ CSRF_TRUSTED_ORIGINS = [
 # HTTPS FIX FOR RENDER
 # =========================
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = False
 
 
 # =========================
