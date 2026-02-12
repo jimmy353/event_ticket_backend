@@ -29,8 +29,7 @@ class EventListSerializer(serializers.ModelSerializer):
 
 
 class OrganizerEventSerializer(serializers.ModelSerializer):
-    image = serializers.Serializer.MethodField()
-
+    image = serializers.SerializerMethodField()
     class Meta:
         model = Event
         fields = [
