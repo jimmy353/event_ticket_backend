@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from cloudinary.models import CloudinaryField
 
 class Event(models.Model):
     CATEGORY_CHOICES = [
@@ -13,7 +14,7 @@ class Event(models.Model):
     location = models.CharField(max_length=255)
     start_date = models.DateTimeField()
     end_date = models.DateTimeField()
-    image = models.ImageField(upload_to="events/", null=True, blank=True)
+    image = CloudinaryField("image", null=True, blank=True)
 
     payout_done = models.BooleanField(default=False)
 
