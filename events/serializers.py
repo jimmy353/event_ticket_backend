@@ -2,6 +2,19 @@ from rest_framework import serializers
 from .models import Event
 
 
+def fix_cloudinary_url(url: str):
+    if not url:
+        return None
+
+    # Force JPG format for mobile
+    url = url.replace("/upload/", "/upload/f_jpg/")
+
+    # Force HTTPS always
+    url = url.replace("http://", "https://")
+
+    return url
+
+
 class EventListSerializer(serializers.ModelSerializer):
     organizer_name = serializers.CharField(source="organizer.email", read_only=True)
     image = serializers.SerializerMethodField()
@@ -23,13 +36,7 @@ class EventListSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         if not obj.image:
             return None
-
-        url = str(obj.image.url)
-
-        # Force cloudinary to return safe format for mobile
-        url = url.replace("/upload/", "/upload/f_jpg/")
-
-        return url
+        return fix_cloudinary_url(str(obj.image.url))
 
 
 class OrganizerEventSerializer(serializers.ModelSerializer):
@@ -49,10 +56,7 @@ class OrganizerEventSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         if not obj.image:
             return None
-
-        url = str(obj.image.url)
-        url = url.replace("/upload/", "/upload/f_jpg/")
-        return url
+        return fix_cloudinary_url(str(obj.image.url))
 
 
 class EventCreateSerializer(serializers.ModelSerializer):
