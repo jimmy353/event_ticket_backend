@@ -26,9 +26,8 @@ class EventListSerializer(serializers.ModelSerializer):
 
         url = str(obj.image.url)
 
-        # force https always
-        if url.startswith("http://"):
-            url = url.replace("http://", "https://")
+        # Force cloudinary to return safe format for mobile
+        url = url.replace("/upload/", "/upload/f_jpg/")
 
         return url
 
@@ -52,10 +51,7 @@ class OrganizerEventSerializer(serializers.ModelSerializer):
             return None
 
         url = str(obj.image.url)
-
-        if url.startswith("http://"):
-            url = url.replace("http://", "https://")
-
+        url = url.replace("/upload/", "/upload/f_jpg/")
         return url
 
 
