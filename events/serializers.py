@@ -2,14 +2,20 @@ from rest_framework import serializers
 from .models import Event
 
 
-def fix_cloudinary_url(url):
-    if not url:
+def fix_cloudinary_url(field):
+    if not field:
         return None
 
-    # always force https
-    url = url.replace("http://", "https://")
+    try:
+        # Cloudinary correct url builder
+        url = field.build_url()
 
-    return url
+        # force https
+        url = url.replace("http://", "https://")
+
+        return url
+    except Exception:
+        return None
 
 
 class EventListSerializer(serializers.ModelSerializer):
@@ -31,9 +37,7 @@ class EventListSerializer(serializers.ModelSerializer):
         ]
 
     def get_image(self, obj):
-        if not obj.image:
-            return None
-        return fix_cloudinary_url(obj.image.url)
+        return fix_cloudinary_url(obj.image)
 
 
 class OrganizerEventSerializer(serializers.ModelSerializer):
@@ -51,9 +55,7 @@ class OrganizerEventSerializer(serializers.ModelSerializer):
         ]
 
     def get_image(self, obj):
-        if not obj.image:
-            return None
-        return fix_cloudinary_url(obj.image.url)
+        return fix_cloudinary_url(obj.image)
 
 
 class EventCreateSerializer(serializers.ModelSerializer):
