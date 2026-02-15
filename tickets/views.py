@@ -10,8 +10,9 @@ from events.models import Event
 
 
 # ===============================
-# LIST TICKET TYPES BY EVENT
+# TICKET TYPES
 # ===============================
+
 @api_view(["GET"])
 def list_ticket_types(request):
     event_id = request.GET.get("event")
@@ -50,6 +51,7 @@ def list_ticket_types(request):
 # ===============================
 # CREATE TICKET TYPE (ORGANIZER)
 # ===============================
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_ticket_type(request):
@@ -58,11 +60,11 @@ def create_ticket_type(request):
     if serializer.is_valid():
         ticket_type = serializer.save()
 
-        # 🔐 Only allow organizer to create ticket types for their event
+        # 🔐 Only organizer can create ticket type for their own event
         if ticket_type.event.organizer != request.user:
             ticket_type.delete()
             return Response(
-                {"error": "You are not allowed to create ticket types for this event"},
+                {"error": "You can only create ticket types for your own events"},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -74,36 +76,24 @@ def create_ticket_type(request):
 # ===============================
 # UPDATE TICKET TYPE (ORGANIZER)
 # ===============================
-@api_view(["PUT"])
+
+@api_view(["PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def update_ticket_type(request, ticket_type_id):
     try:
         ticket_type = TicketType.objects.select_related("event").get(id=ticket_type_id)
     except TicketType.DoesNotExist:
-        return Response(
-            {"error": "Ticket type not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({"error": "Ticket type not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # 🔐 Only organizer of the event can update
+    # 🔐 Only event organizer can update
     if ticket_type.event.organizer != request.user:
-        return Response(
-            {"error": "You are not allowed to update this ticket type"},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        return Response({"error": "Not allowed"}, status=status.HTTP_403_FORBIDDEN)
 
     serializer = TicketTypeSerializer(ticket_type, data=request.data, partial=True)
 
     if serializer.is_valid():
         serializer.save()
-
-        return Response(
-            {
-                "message": "Ticket type updated successfully",
-                "ticket_type": serializer.data
-            },
-            status=status.HTTP_200_OK
-        )
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -111,42 +101,33 @@ def update_ticket_type(request, ticket_type_id):
 # ===============================
 # DELETE TICKET TYPE (ORGANIZER)
 # ===============================
+
 @api_view(["DELETE"])
 @permission_classes([IsAuthenticated])
 def delete_ticket_type(request, ticket_type_id):
     try:
         ticket_type = TicketType.objects.select_related("event").get(id=ticket_type_id)
     except TicketType.DoesNotExist:
-        return Response(
-            {"error": "Ticket type not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({"error": "Ticket type not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # 🔐 Only organizer of the event can delete
+    # 🔐 Only organizer can delete
     if ticket_type.event.organizer != request.user:
-        return Response(
-            {"error": "You are not allowed to delete this ticket type"},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        return Response({"error": "Not allowed"}, status=status.HTTP_403_FORBIDDEN)
 
     ticket_type.delete()
-
-    return Response(
-        {"message": "Ticket type deleted successfully"},
-        status=status.HTTP_200_OK
-    )
+    return Response({"message": "Ticket type deleted successfully"}, status=status.HTTP_200_OK)
 
 
 # ===============================
 # BUY / CREATE TICKET (USER)
 # ===============================
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_ticket(request):
     ticket_type_id = request.data.get("ticket_type_id")
     quantity = request.data.get("quantity", 1)
 
-    # Validate quantity
     try:
         quantity = int(quantity)
         if quantity < 1:
@@ -164,7 +145,7 @@ def create_ticket(request):
         )
 
     try:
-        ticket_type = TicketType.objects.select_related("event").get(id=ticket_type_id)
+        ticket_type = TicketType.objects.get(id=ticket_type_id)
     except TicketType.DoesNotExist:
         return Response(
             {"error": "Ticket type not found"},
@@ -192,7 +173,6 @@ def create_ticket(request):
             "ticket_code": str(ticket.ticket_code),
         })
 
-    # Update sold count
     ticket_type.quantity_sold += quantity
     ticket_type.save(update_fields=["quantity_sold"])
 
@@ -212,6 +192,7 @@ def create_ticket(request):
 # ===============================
 # SCAN TICKET (ORGANIZER ONLY)
 # ===============================
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def scan_ticket(request):
@@ -238,28 +219,24 @@ def scan_ticket(request):
 
     event = ticket.ticket_type.event
 
-    # Organizer ownership check
     if event.organizer != request.user:
         return Response(
             {"error": "You are not allowed to scan tickets for this event"},
             status=status.HTTP_403_FORBIDDEN
         )
 
-    # Ticket must belong to selected event
     if str(event.id) != str(event_id):
         return Response(
             {"error": "Ticket does not belong to this event"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Block cancelled tickets
     if ticket.is_cancelled:
         return Response(
             {"error": "Ticket refunded/cancelled"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Block reused tickets
     if ticket.is_used:
         return Response(
             {"error": "Ticket already used"},
@@ -286,43 +263,9 @@ def scan_ticket(request):
 
 
 # ===============================
-# EVENT SCAN STATS (ORGANIZER HUB)
+# MY TICKETS
 # ===============================
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def event_scan_stats(request, event_id):
-    try:
-        event = Event.objects.get(
-            id=event_id,
-            organizer=request.user
-        )
-    except Event.DoesNotExist:
-        return Response(
-            {"error": "Event not found or not yours"},
-            status=status.HTTP_404_NOT_FOUND
-        )
 
-    total_sold = Ticket.objects.filter(ticket_type__event=event).count()
-
-    checked_in = Ticket.objects.filter(
-        ticket_type__event=event,
-        is_used=True
-    ).count()
-
-    return Response(
-        {
-            "event": event.title,
-            "total_sold": total_sold,
-            "checked_in": checked_in,
-            "remaining": max(total_sold - checked_in, 0),
-        },
-        status=status.HTTP_200_OK
-    )
-
-
-# ===============================
-# MY TICKETS (MOBILE APP)
-# ===============================
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_tickets(request):

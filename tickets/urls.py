@@ -6,27 +6,16 @@ from .views import (
     create_ticket_type,
     update_ticket_type,
     delete_ticket_type,
-    event_scan_stats,
 )
 from . import views
 
 urlpatterns = [
-    path("", list_ticket_types),  
+    path("", list_ticket_types),                      # GET /api/tickets/?event=1
+    path("type/create/", create_ticket_type),         # POST /api/tickets/type/create/
+    path("type/<int:ticket_type_id>/update/", update_ticket_type),  # PUT/PATCH
+    path("type/<int:ticket_type_id>/delete/", delete_ticket_type),  # DELETE
 
-    # Ticket Types (Organizer)
-    path("type/create/", create_ticket_type),
-    path("<int:ticket_type_id>/update/", update_ticket_type),
-    path("<int:ticket_type_id>/delete/", delete_ticket_type),
-
-    # Buy ticket
-    path("create/", create_ticket),
-
-    # Scan
-    path("scan/", scan_ticket),
-
-    # Organizer stats
-    path("event/<int:event_id>/scan-stats/", event_scan_stats),
-
-    # My tickets
-    path("my/", views.my_tickets),
+    path("create/", create_ticket),                   # POST /api/tickets/create/
+    path("scan/", scan_ticket),                       # POST /api/tickets/scan/
+    path("my/", views.my_tickets),                    # GET /api/tickets/my/
 ]
