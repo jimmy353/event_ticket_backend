@@ -11,6 +11,9 @@ from tickets.models import Ticket
 from tickets.utils import generate_qr_code
 
 
+# ===============================
+# INITIATE PAYMENT (USER)
+# ===============================
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def initiate_payment(request):
@@ -26,20 +29,13 @@ def initiate_payment(request):
     order_id = request.data.get("order_id")
     provider = request.data.get("provider")
 
-    # ✅ accept both keys
     phone_number = request.data.get("phone_number") or request.data.get("phone")
 
     if not order_id:
-        return Response(
-            {"error": "order_id required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "order_id required"}, status=status.HTTP_400_BAD_REQUEST)
 
     if not provider:
-        return Response(
-            {"error": "provider required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "provider required"}, status=status.HTTP_400_BAD_REQUEST)
 
     if provider not in ["momo", "mgurush"]:
         return Response(
@@ -48,15 +44,9 @@ def initiate_payment(request):
         )
 
     if not phone_number:
-        return Response(
-            {"error": "phone_number required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "phone_number required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ transaction makes it safe (no double creation)
     with transaction.atomic():
-
-        # ✅ lock order row
         try:
             order = (
                 Order.objects
@@ -65,13 +55,8 @@ def initiate_payment(request):
                 .get(id=order_id, user=request.user)
             )
         except Order.DoesNotExist:
-            return Response(
-                {"error": "Order not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # ✅ If already paid, return the latest tickets (best effort)
-        # NOTE: since Ticket has no FK to Order, we return latest tickets for this user+ticket_type.
         if order.status == "paid":
             latest_tickets = (
                 Ticket.objects
@@ -95,13 +80,10 @@ def initiate_payment(request):
                 status=status.HTTP_200_OK,
             )
 
-        ticket_type = order.ticket_type
-
-        # ✅ lock ticket_type row too (prevents oversell)
         ticket_type = (
-            ticket_type.__class__.objects
+            order.ticket_type.__class__.objects
             .select_for_update()
-            .get(id=ticket_type.id)
+            .get(id=order.ticket_type.id)
         )
 
         available = ticket_type.quantity_total - ticket_type.quantity_sold
@@ -111,7 +93,6 @@ def initiate_payment(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Create Payment record
         payment = Payment.objects.create(
             order=order,
             provider=provider,
@@ -122,20 +103,16 @@ def initiate_payment(request):
 
         # ===========================
         # SIMULATE PAYMENT SUCCESS
-        # (later: replace with real provider callback/webhook)
         # ===========================
         payment.status = "success"
         payment.save(update_fields=["status"])
 
-        # ✅ Mark order paid
         order.status = "paid"
         order.save(update_fields=["status"])
 
-        # ✅ Increase quantity_sold correctly
         ticket_type.quantity_sold += order.quantity
         ticket_type.save(update_fields=["quantity_sold"])
 
-        # ✅ Create MULTIPLE tickets
         created_tickets = []
 
         for _ in range(order.quantity):
@@ -168,3 +145,41 @@ def initiate_payment(request):
         },
         status=status.HTTP_200_OK,
     )
+
+
+# ===============================
+# ORGANIZER PAYMENTS LIST
+# ===============================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organizer_payments(request):
+    payments = (
+        Payment.objects
+        .select_related(
+            "order",
+            "order__user",
+            "order__ticket_type",
+            "order__ticket_type__event"
+        )
+        .filter(order__ticket_type__event__organizer=request.user)
+        .order_by("-created_at")
+    )
+
+    data = []
+    for p in payments:
+        data.append({
+            "id": p.id,
+            "provider": p.provider,
+            "phone": p.phone,
+            "amount": float(p.amount),
+            "status": p.status,
+            "created_at": p.created_at,
+
+            "order_id": p.order.id,
+            "customer_email": p.order.user.email,
+
+            "ticket_type_name": p.order.ticket_type.name,
+            "event_title": p.order.ticket_type.event.title,
+        })
+
+    return Response(data, status=status.HTTP_200_OK)
