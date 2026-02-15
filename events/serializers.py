@@ -7,12 +7,8 @@ def fix_cloudinary_url(field):
         return None
 
     try:
-        # Cloudinary correct url builder
         url = field.build_url()
-
-        # force https
         url = url.replace("http://", "https://")
-
         return url
     except Exception:
         return None
@@ -48,7 +44,9 @@ class OrganizerEventSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "title",
+            "description",
             "location",
+            "category",
             "start_date",
             "end_date",
             "image",
