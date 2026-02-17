@@ -7,6 +7,7 @@ from pathlib import Path
 from datetime import timedelta
 import os
 import dj_database_url
+from dotenv import load_dotenv
 
 
 # =========================
@@ -32,6 +33,7 @@ ALLOWED_HOSTS = [
     "api.sirheartevents.com",
 ]
 
+load_dotenv()
 
 # =========================
 # INSTALLED APPS
@@ -241,3 +243,11 @@ SECURE_SSL_REDIRECT = False
 # CUSTOM SETTINGS
 # =========================
 AUTO_PAYOUT_ON_STARTUP = True
+
+
+
+MOMO_SUBSCRIPTION_KEY = os.getenv("MOMO_SUBSCRIPTION_KEY")
+MOMO_API_USER = os.getenv("MOMO_API_USER")
+MOMO_API_KEY = os.getenv("MOMO_API_KEY")
+MOMO_ENVIRONMENT = os.getenv("MOMO_ENVIRONMENT", "sandbox")
+MOMO_BASE_URL = os.getenv("MOMO_BASE_URL", "https://sandbox.momodeveloper.mtn.com")

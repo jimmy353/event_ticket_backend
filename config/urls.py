@@ -33,6 +33,7 @@ urlpatterns = [
     path("api/payments/", include("payments.urls")),
     path("api/organizer/", include("organizer.urls")),
     path("api/refunds/", include("refunds.urls")),
+    
 ]
 
 # serve media files only in development
