@@ -38,3 +38,9 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order #{self.id}"
+
+
+        momo_reference_id = models.CharField(max_length=100, blank=True, null=True)
+        payment_status = models.CharField(max_length=20, default="PENDING")
+        payment_method = models.CharField(max_length=30, default="MOMO")
+        financial_transaction_id = models.CharField(max_length=100, blank=True, null=True)
