@@ -12,16 +12,13 @@ class TestEmailView(APIView):
         try:
             send_mail(
                 subject="Sirheart Test Email",
-                message="If you received this email, SMTP is working perfectly ✅",
+                message="SendGrid test email working ✅",
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=["jeli05319@gmail.com"],
                 fail_silently=False,
             )
 
-            return Response({"message": "Test email sent successfully ✅"})
+            return Response({"message": "Email sent successfully ✅"}, status=200)
 
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=500
-            )
+            return Response({"error": str(e)}, status=500)
