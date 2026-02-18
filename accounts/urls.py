@@ -6,10 +6,24 @@ from .views import (
     ProfileView,
     OrganizerRequestView,
     LoginWithRoleView,
+    VerifyOTPView,
+    ResendOTPView,
+    ForgotPasswordView,
+    ResetPasswordView,
 )
 
 urlpatterns = [
+    # register
     path("register/", RegisterView.as_view(), name="register"),
+
+    # verify email OTP
+    path("verify-otp/", VerifyOTPView.as_view(), name="verify_otp"),
+
+    # resend OTP
+    path("resend-otp/", ResendOTPView.as_view(), name="resend_otp"),
+
+    # login with role
+    path("login-role/", LoginWithRoleView.as_view(), name="login_role"),
 
     # JWT refresh
     path("refresh/", TokenRefreshView.as_view(), name="token_refresh"),
@@ -20,6 +34,9 @@ urlpatterns = [
     # organizer request
     path("organizer/request/", OrganizerRequestView.as_view(), name="organizer_request"),
 
-    # role login
-    path("login-role/", LoginWithRoleView.as_view(), name="login_role"),
+    # forgot password OTP
+    path("forgot-password/", ForgotPasswordView.as_view(), name="forgot_password"),
+
+    # reset password using OTP
+    path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
 ]

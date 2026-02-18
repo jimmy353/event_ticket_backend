@@ -1,5 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from django.utils import timezone
+from datetime import timedelta
+import random
 
 
 class UserManager(BaseUserManager):
@@ -22,6 +25,8 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_organizer", True)
         extra_fields.setdefault("is_customer", False)
 
+        extra_fields.setdefault("is_verified", True)  # ✅ superuser verified
+
         return self.create_user(email, password, **extra_fields)
 
 
@@ -33,6 +38,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     # roles
     is_customer = models.BooleanField(default=True)
     is_organizer = models.BooleanField(default=False)
+
+    # verification
+    is_verified = models.BooleanField(default=False)  # ✅ email verified or not
 
     # system fields
     is_active = models.BooleanField(default=True)
@@ -47,6 +55,35 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class EmailOTP(models.Model):
+    PURPOSE_CHOICES = (
+        ("verify", "Verify Email"),
+        ("reset", "Reset Password"),
+    )
+
+    email = models.EmailField()
+    otp_code = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        if not self.otp_code:
+            self.otp_code = str(random.randint(100000, 999999))  # 6-digit OTP
+
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(minutes=10)  # expires in 10 minutes
+
+        super().save(*args, **kwargs)
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"{self.email} - {self.otp_code} ({self.purpose})"
 
 
 class OrganizerRequest(models.Model):
