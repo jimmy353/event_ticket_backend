@@ -27,41 +27,38 @@ User = get_user_model()
 # ==========================
 # SEND OTP EMAIL FUNCTION
 # ==========================
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+from django.conf import settings
+
+
 def send_otp_email(email, otp_code, purpose="verify"):
     if purpose == "verify":
         subject = "Verify your Sirheart Events account"
-        message = f"""
-Hello,
-
-Your verification OTP code is: {otp_code}
-
-This code will expire in 10 minutes.
-
-If you did not create this account, ignore this email.
-
-Sirheart Events Team
-"""
+        message = f"Your OTP code is: {otp_code}\n\nThis code will expire in 10 minutes."
     else:
         subject = "Reset your Sirheart Events password"
-        message = f"""
-Hello,
+        message = f"Your password reset OTP code is: {otp_code}\n\nThis code will expire in 10 minutes."
 
-Your password reset OTP code is: {otp_code}
+    try:
+        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
 
-This code will expire in 10 minutes.
+        mail = Mail(
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to_emails=email,
+            subject=subject,
+            plain_text_content=message,
+        )
 
-If you did not request a password reset, ignore this email.
+        response = sg.send(mail)
+        print("✅ SendGrid Response:", response.status_code)
 
-Sirheart Events Team
-"""
+        return True
 
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [email],
-        fail_silently=False,
-    )
+    except Exception as e:
+        print("❌ SendGrid Email sending failed:", str(e))
+        return False
+
 
 
 # ==========================
@@ -87,14 +84,14 @@ class RegisterView(APIView):
 
         # send OTP
         try:
-            send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
-        except Exception as e:
-            # rollback user creation if email failed
-            user.delete()
-            return Response(
-                {"error": f"Failed to send OTP email: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+            sent = send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
+
+if not sent:
+    return Response(
+        {"error": "Failed to send OTP email"},
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+
 
         return Response(
             {
