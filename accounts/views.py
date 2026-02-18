@@ -4,8 +4,6 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate, get_user_model
-from django.core.mail import send_mail
-from django.conf import settings
 
 from .serializers import (
     RegisterSerializer,
@@ -18,12 +16,13 @@ from .serializers import (
 )
 
 from .models import OrganizerRequest, EmailOTP
+from .sendgrid_email import send_email
 
 User = get_user_model()
 
 
 # ==========================
-# SEND OTP EMAIL FUNCTION
+# SEND OTP EMAIL (SENDGRID)
 # ==========================
 def send_otp_email(email, otp_code, purpose="verify"):
     if purpose == "verify":
@@ -31,11 +30,11 @@ def send_otp_email(email, otp_code, purpose="verify"):
         message = f"""
 Hello,
 
-Your verification OTP code is: {otp_code}
+Your verification OTP code is:
+
+{otp_code}
 
 This code will expire in 10 minutes.
-
-If you did not create this account, ignore this email.
 
 Sirheart Events Team
 """
@@ -44,27 +43,20 @@ Sirheart Events Team
         message = f"""
 Hello,
 
-Your password reset OTP code is: {otp_code}
+Your password reset OTP code is:
+
+{otp_code}
 
 This code will expire in 10 minutes.
-
-If you did not request a password reset, ignore this email.
 
 Sirheart Events Team
 """
 
     try:
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [email],
-            fail_silently=False,
-        )
-        print("✅ OTP Email Sent Successfully to:", email)
-
+        send_email(email, subject, message)
+        print("✅ OTP email sent to:", email)
     except Exception as e:
-        print("❌ Email sending failed:", str(e))
+        print("❌ OTP email failed:", str(e))
 
 
 # ==========================
@@ -76,29 +68,34 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
 
-        if serializer.is_valid():
-            user = serializer.save()
-            role = request.data.get("role", "customer")
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # Delete old unused OTPs
-            EmailOTP.objects.filter(email=user.email, purpose="verify", is_used=False).delete()
+        user = serializer.save()
+        role = request.data.get("role", "customer")
 
-            # Create new OTP
-            otp_obj = EmailOTP.objects.create(email=user.email, purpose="verify")
+        # remove old OTPs
+        EmailOTP.objects.filter(
+            email=user.email,
+            purpose="verify",
+            is_used=False
+        ).delete()
 
-            # Send OTP email
-            send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
+        otp_obj = EmailOTP.objects.create(
+            email=user.email,
+            purpose="verify"
+        )
 
-            return Response(
-                {
-                    "message": "Account created. OTP sent to your email. Please verify to continue.",
-                    "email": user.email,
-                    "role": role,
-                },
-                status=status.HTTP_201_CREATED,
-            )
+        send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {
+                "message": "Account created. OTP sent to your email.",
+                "email": user.email,
+                "role": role,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ==========================
@@ -110,30 +107,26 @@ class VerifyOTPView(APIView):
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
 
-        if serializer.is_valid():
-            otp_obj = serializer.validated_data["otp_obj"]
-            email = serializer.validated_data["email"]
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        otp_obj = serializer.validated_data["otp_obj"]
+        email = serializer.validated_data["email"]
 
-            user.is_verified = True
-            user.save()
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"error": "User not found"}, status=404)
 
-            otp_obj.is_used = True
-            otp_obj.save()
+        user.is_verified = True
+        user.save()
 
-            return Response(
-                {
-                    "message": "Email verified successfully. You can now login.",
-                    "email": user.email,
-                },
-                status=status.HTTP_200_OK,
-            )
+        otp_obj.is_used = True
+        otp_obj.save()
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"message": "Email verified successfully"},
+            status=status.HTTP_200_OK,
+        )
 
 
 # ==========================
@@ -145,32 +138,32 @@ class ResendOTPView(APIView):
     def post(self, request):
         serializer = ResendOTPSerializer(data=request.data)
 
-        if serializer.is_valid():
-            email = serializer.validated_data["email"]
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
 
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        email = serializer.validated_data["email"]
 
-            if user.is_verified:
-                return Response({"message": "Account already verified"}, status=status.HTTP_200_OK)
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"error": "User not found"}, status=404)
 
-            # Delete old OTPs
-            EmailOTP.objects.filter(email=email, purpose="verify", is_used=False).delete()
+        if user.is_verified:
+            return Response({"message": "Account already verified"}, status=200)
 
-            # Create new OTP
-            otp_obj = EmailOTP.objects.create(email=email, purpose="verify")
+        EmailOTP.objects.filter(
+            email=email,
+            purpose="verify",
+            is_used=False
+        ).delete()
 
-            # Send OTP
-            send_otp_email(email, otp_obj.otp_code, purpose="verify")
+        otp_obj = EmailOTP.objects.create(
+            email=email,
+            purpose="verify"
+        )
 
-            return Response(
-                {"message": "New OTP sent to your email"},
-                status=status.HTTP_200_OK,
-            )
+        send_otp_email(email, otp_obj.otp_code, purpose="verify")
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "OTP resent"}, status=200)
 
 
 # ==========================
@@ -184,116 +177,19 @@ class LoginWithRoleView(APIView):
         password = request.data.get("password")
         role = request.data.get("role")
 
-        if not email or not password:
-            return Response(
-                {"detail": "Email and password are required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if role not in ["customer", "organizer"]:
-            return Response(
-                {"detail": "Role must be customer or organizer"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         user = authenticate(username=email, password=password)
 
         if not user:
-            return Response(
-                {"detail": "Invalid credentials"},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
+            return Response({"detail": "Invalid credentials"}, status=401)
 
-        # BLOCK LOGIN IF EMAIL NOT VERIFIED
         if not user.is_verified:
             return Response(
                 {
-                    "detail": "Email not verified. Please verify your email OTP first.",
+                    "detail": "Email not verified",
                     "status": "not_verified",
                 },
-                status=status.HTTP_403_FORBIDDEN,
+                status=403,
             )
-
-        # ==========================
-        # ORGANIZER LOGIN CHECK
-        # ==========================
-        if role == "organizer":
-
-            if user.is_organizer:
-                refresh = RefreshToken.for_user(user)
-                return Response(
-                    {
-                        "refresh": str(refresh),
-                        "access": str(refresh.access_token),
-                        "role": role,
-                        "status": "approved",
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
-            if OrganizerRequest.objects.filter(user=user).exists():
-                req = OrganizerRequest.objects.get(user=user)
-
-                if req.status == "pending":
-                    return Response(
-                        {
-                            "detail": "Your organizer request is pending. Please wait 1 to 3 days.",
-                            "status": "pending",
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-
-                if req.status == "rejected":
-                    return Response(
-                        {
-                            "detail": "Your organizer request was rejected. Contact support.",
-                            "status": "rejected",
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-
-            return Response(
-                {
-                    "detail": "You have not submitted an organizer request yet.",
-                    "status": "not_requested",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # ==========================
-        # CUSTOMER LOGIN CHECK
-        # ==========================
-        if role == "customer":
-
-            if user.is_organizer:
-                return Response(
-                    {
-                        "detail": "This account is an organizer. Switch to Organizer tab.",
-                        "status": "wrong_role",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            if OrganizerRequest.objects.filter(user=user).exists():
-                req = OrganizerRequest.objects.get(user=user)
-
-                if req.status == "pending":
-                    return Response(
-                        {
-                            "detail": "Your organizer request is pending. Please login using Organizer tab.",
-                            "status": "pending",
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
-
-                if req.status == "rejected":
-                    return Response(
-                        {
-                            "detail": "Your organizer request was rejected. Please login using Organizer tab.",
-                            "status": "rejected",
-                        },
-                        status=status.HTTP_403_FORBIDDEN,
-                    )
 
         refresh = RefreshToken.for_user(user)
 
@@ -304,12 +200,12 @@ class LoginWithRoleView(APIView):
                 "role": role,
                 "status": "approved",
             },
-            status=status.HTTP_200_OK,
+            status=200,
         )
 
 
 # ==========================
-# FORGOT PASSWORD (SEND OTP)
+# FORGOT PASSWORD
 # ==========================
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
@@ -317,24 +213,29 @@ class ForgotPasswordView(APIView):
     def post(self, request):
         serializer = ForgotPasswordSerializer(data=request.data)
 
-        if serializer.is_valid():
-            email = serializer.validated_data["email"]
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
 
-            EmailOTP.objects.filter(email=email, purpose="reset", is_used=False).delete()
-            otp_obj = EmailOTP.objects.create(email=email, purpose="reset")
+        email = serializer.validated_data["email"]
 
-            send_otp_email(email, otp_obj.otp_code, purpose="reset")
+        EmailOTP.objects.filter(
+            email=email,
+            purpose="reset",
+            is_used=False
+        ).delete()
 
-            return Response(
-                {"message": "Password reset OTP sent to your email"},
-                status=status.HTTP_200_OK,
-            )
+        otp_obj = EmailOTP.objects.create(
+            email=email,
+            purpose="reset"
+        )
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        send_otp_email(email, otp_obj.otp_code, purpose="reset")
+
+        return Response({"message": "Password reset OTP sent"}, status=200)
 
 
 # ==========================
-# RESET PASSWORD (VERIFY OTP + SET PASSWORD)
+# RESET PASSWORD
 # ==========================
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
@@ -342,28 +243,24 @@ class ResetPasswordView(APIView):
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
 
-        if serializer.is_valid():
-            email = serializer.validated_data["email"]
-            new_password = serializer.validated_data["new_password"]
-            otp_obj = serializer.validated_data["otp_obj"]
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
 
-            try:
-                user = User.objects.get(email=email)
-            except User.DoesNotExist:
-                return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        email = serializer.validated_data["email"]
+        new_password = serializer.validated_data["new_password"]
+        otp_obj = serializer.validated_data["otp_obj"]
 
-            user.set_password(new_password)
-            user.save()
+        user = User.objects.filter(email=email).first()
+        if not user:
+            return Response({"error": "User not found"}, status=404)
 
-            otp_obj.is_used = True
-            otp_obj.save()
+        user.set_password(new_password)
+        user.save()
 
-            return Response(
-                {"message": "Password reset successful. You can now login."},
-                status=status.HTTP_200_OK,
-            )
+        otp_obj.is_used = True
+        otp_obj.save()
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Password reset successful"}, status=200)
 
 
 # ==========================
@@ -375,61 +272,3 @@ class ProfileView(APIView):
     def get(self, request):
         serializer = ProfileSerializer(request.user)
         return Response(serializer.data)
-
-
-# ==========================
-# ORGANIZER REQUEST
-# ==========================
-class OrganizerRequestView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        if request.user.is_organizer:
-            return Response(
-                {"error": "You are already an organizer"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if OrganizerRequest.objects.filter(user=request.user).exists():
-            req = OrganizerRequest.objects.get(user=request.user)
-            return Response(
-                {
-                    "error": "Organizer request already submitted",
-                    "status": req.status,
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = OrganizerRequestSerializer(data=request.data)
-
-        if serializer.is_valid():
-            OrganizerRequest.objects.create(
-                user=request.user,
-                company_name=serializer.validated_data["company_name"],
-                momo_number=serializer.validated_data["momo_number"],
-                id_document=serializer.validated_data["id_document"],
-                status="pending",
-            )
-
-            return Response(
-                {"message": "Organizer request submitted successfully"},
-                status=status.HTTP_201_CREATED,
-            )
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def get(self, request):
-        try:
-            req = OrganizerRequest.objects.get(user=request.user)
-        except OrganizerRequest.DoesNotExist:
-            return Response({"status": "not_requested"}, status=status.HTTP_200_OK)
-
-        return Response(
-            {
-                "status": req.status,
-                "company_name": req.company_name,
-                "momo_number": req.momo_number,
-                "id_document": req.id_document.url if req.id_document else None,
-            },
-            status=status.HTTP_200_OK,
-        )
