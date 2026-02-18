@@ -251,3 +251,25 @@ MOMO_API_USER = os.getenv("MOMO_API_USER")
 MOMO_API_KEY = os.getenv("MOMO_API_KEY")
 MOMO_ENVIRONMENT = os.getenv("MOMO_ENVIRONMENT", "sandbox")
 MOMO_BASE_URL = os.getenv("MOMO_BASE_URL", "https://sandbox.momodeveloper.mtn.com")
+
+
+
+# =========================
+# EMAIL CONFIG (HOSTINGER SMTP)
+# =========================
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.hostinger.com")
+
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+
+
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    f"Sirheart Events <{EMAIL_HOST_USER}>"
+)
