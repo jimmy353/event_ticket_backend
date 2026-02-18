@@ -1,5 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
+from .test_views import TestEmailView
+
 
 from .views import (
     RegisterView,
@@ -39,4 +41,7 @@ urlpatterns = [
 
     # reset password using OTP
     path("reset-password/", ResetPasswordView.as_view(), name="reset_password"),
+
+    path("test-email/", TestEmailView.as_view(), name="test_email"),
+
 ]
