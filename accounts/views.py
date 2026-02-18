@@ -58,7 +58,7 @@ Sirheart Events Team
         message,
         settings.DEFAULT_FROM_EMAIL,
         [email],
-        fail_silently=False,
+        fail_silently=True,
     )
 
 
