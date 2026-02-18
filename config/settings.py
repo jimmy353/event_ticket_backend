@@ -255,21 +255,19 @@ MOMO_BASE_URL = os.getenv("MOMO_BASE_URL", "https://sandbox.momodeveloper.mtn.co
 
 
 # =========================
-# EMAIL CONFIG (HOSTINGER SMTP)
+# EMAIL CONFIG (sendgrid SMTP)
 # =========================
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.hostinger.com")
+EMAIL_HOST = "smtp.sendgrid.net"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
 
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
-EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
-
-
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+EMAIL_HOST_USER = "apikey"
+EMAIL_HOST_PASSWORD = os.getenv("SENDGRID_API_KEY")
 
 DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL",
-    f"Sirheart Events <{EMAIL_HOST_USER}>"
+    "Sirheart Events <noreply@sirheartevents.com>"
 )
