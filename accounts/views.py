@@ -53,13 +53,18 @@ If you did not request a password reset, ignore this email.
 Sirheart Events Team
 """
 
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [email],
-        fail_silently=True,
-    )
+    try:
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [email],
+            fail_silently=False,
+        )
+        print("✅ OTP Email Sent Successfully to:", email)
+
+    except Exception as e:
+        print("❌ Email sending failed:", str(e))
 
 
 # ==========================
@@ -73,12 +78,16 @@ class RegisterView(APIView):
 
         if serializer.is_valid():
             user = serializer.save()
-            role = request.data.get("role")
+            role = request.data.get("role", "customer")
 
-            # send verification OTP
-            otp_obj = EmailOTP.objects.filter(email=user.email, purpose="verify", is_used=False).last()
-            if otp_obj:
-                send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
+            # Delete old unused OTPs
+            EmailOTP.objects.filter(email=user.email, purpose="verify", is_used=False).delete()
+
+            # Create new OTP
+            otp_obj = EmailOTP.objects.create(email=user.email, purpose="verify")
+
+            # Send OTP email
+            send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
 
             return Response(
                 {
@@ -147,9 +156,13 @@ class ResendOTPView(APIView):
             if user.is_verified:
                 return Response({"message": "Account already verified"}, status=status.HTTP_200_OK)
 
+            # Delete old OTPs
             EmailOTP.objects.filter(email=email, purpose="verify", is_used=False).delete()
+
+            # Create new OTP
             otp_obj = EmailOTP.objects.create(email=email, purpose="verify")
 
+            # Send OTP
             send_otp_email(email, otp_obj.otp_code, purpose="verify")
 
             return Response(
@@ -161,7 +174,7 @@ class ResendOTPView(APIView):
 
 
 # ==========================
-# LOGIN (BLOCK IF NOT VERIFIED)
+# LOGIN WITH ROLE
 # ==========================
 class LoginWithRoleView(APIView):
     permission_classes = [AllowAny]
@@ -191,7 +204,7 @@ class LoginWithRoleView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # ✅ BLOCK LOGIN IF EMAIL NOT VERIFIED
+        # BLOCK LOGIN IF EMAIL NOT VERIFIED
         if not user.is_verified:
             return Response(
                 {
