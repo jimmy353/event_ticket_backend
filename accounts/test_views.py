@@ -33,7 +33,7 @@ class TestEmailView(APIView):
             subject="Sirheart Test Email",
             message="If you received this, SMTP is working!",
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=["yourgmail@gmail.com"],  # change to your email
+            recipient_list=["jimelias213@gmail.com"],  # change to your email
             fail_silently=False
         )
 
