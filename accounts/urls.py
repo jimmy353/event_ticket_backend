@@ -9,7 +9,6 @@ from .views import (
     ResetPasswordView,
     ProfileView,
     OrganizerRequestView,
-    TestEmailView,
 )
 
 urlpatterns = [
@@ -24,6 +23,4 @@ urlpatterns = [
 
     path("profile/", ProfileView.as_view()),
     path("organizer-request/", OrganizerRequestView.as_view()),
-
-    path("test-email/", TestEmailView.as_view()),
 ]
