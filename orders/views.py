@@ -1,7 +1,9 @@
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Sum, Count
+from django.db.models.functions import TruncMonth
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,13 +15,14 @@ from payments.models import Payment
 from events.models import Event
 
 
-# =====================================
+# =====================================================
 # CREATE ORDER (USER)
-# =====================================
+# =====================================================
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_order(request):
+
     ticket_id = request.data.get("ticket_id")
     quantity = int(request.data.get("quantity", 1))
 
@@ -61,16 +64,17 @@ def create_order(request):
     }, status=201)
 
 
-# =====================================
+# =====================================================
 # USER ORDERS
-# =====================================
+# =====================================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_orders(request):
+
     orders = (
         Order.objects
-        .select_related("ticket_type", "ticket_type__event")
+        .select_related("ticket_type__event")
         .filter(user=request.user)
         .order_by("-created_at")
     )
@@ -89,16 +93,17 @@ def my_orders(request):
     return Response(data)
 
 
-# =====================================
+# =====================================================
 # REQUEST REFUND (USER)
-# =====================================
+# =====================================================
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def request_refund(request, order_id):
+
     try:
         order = Order.objects.select_related(
-            "ticket_type", "ticket_type__event"
+            "ticket_type__event"
         ).get(id=order_id, user=request.user)
     except Order.DoesNotExist:
         return Response({"error": "Order not found"}, status=404)
@@ -130,13 +135,14 @@ def request_refund(request, order_id):
     })
 
 
-# =====================================
+# =====================================================
 # ORGANIZER REFUND REQUESTS
-# =====================================
+# =====================================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organizer_refund_requests(request):
+
     orders = (
         Order.objects
         .select_related("ticket_type__event", "user")
@@ -160,9 +166,9 @@ def organizer_refund_requests(request):
     return Response(data)
 
 
-# =====================================
+# =====================================================
 # ORGANIZER APPROVE REFUND
-# =====================================
+# =====================================================
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -215,9 +221,9 @@ def organizer_approve_refund(request, order_id):
     })
 
 
-# =====================================
+# =====================================================
 # ORGANIZER ORDERS LIST
-# =====================================
+# =====================================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -246,9 +252,9 @@ def organizer_orders(request):
     return Response(data)
 
 
-# =====================================
-# ORGANIZER DASHBOARD ANALYTICS
-# =====================================
+# =====================================================
+# ORGANIZER DASHBOARD STATS (BASIC)
+# =====================================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -283,4 +289,77 @@ def organizer_dashboard_stats(request):
         "total_revenue": float(total_revenue),
         "total_commission": float(total_commission),
         "total_organizer_earnings": float(total_organizer_earnings),
+    })
+
+
+# =====================================================
+# ORGANIZER ADVANCED ANALYTICS
+# =====================================================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organizer_advanced_analytics(request):
+
+    organizer = request.user
+
+    paid_orders = Order.objects.filter(
+        ticket_type__event__organizer=organizer,
+        status="paid"
+    )
+
+    # Monthly revenue
+    monthly = (
+        paid_orders
+        .annotate(month=TruncMonth("created_at"))
+        .values("month")
+        .annotate(total=Sum("total_amount"))
+        .order_by("month")
+    )
+
+    monthly_revenue = [{
+        "month": m["month"].strftime("%Y-%m"),
+        "total": float(m["total"])
+    } for m in monthly if m["month"]]
+
+    # Revenue per event
+    per_event = (
+        paid_orders
+        .values("ticket_type__event__title")
+        .annotate(total=Sum("total_amount"))
+        .order_by("-total")
+    )
+
+    revenue_per_event = [{
+        "event": e["ticket_type__event__title"],
+        "total": float(e["total"])
+    } for e in per_event]
+
+    # Best selling ticket types
+    best_tickets = (
+        paid_orders
+        .values("ticket_type__name")
+        .annotate(total_sold=Sum("quantity"))
+        .order_by("-total_sold")
+    )
+
+    # Orders timeline
+    timeline = (
+        Order.objects
+        .filter(ticket_type__event__organizer=organizer)
+        .annotate(month=TruncMonth("created_at"))
+        .values("month")
+        .annotate(total=Count("id"))
+        .order_by("month")
+    )
+
+    orders_timeline = [{
+        "month": t["month"].strftime("%Y-%m"),
+        "orders": t["total"]
+    } for t in timeline if t["month"]]
+
+    return Response({
+        "monthly_revenue": monthly_revenue,
+        "revenue_per_event": revenue_per_event,
+        "best_selling_ticket_types": list(best_tickets),
+        "orders_timeline": orders_timeline,
     })
