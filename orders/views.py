@@ -303,96 +303,106 @@ def organizer_approve_refund(request, order_id):
 @permission_classes([IsAuthenticated])
 def organizer_advanced_analytics(request):
 
-    range_param = request.GET.get("range", "30d")
-    now = timezone.now()
+    filter_type = request.GET.get("range", "all")
 
-    if range_param == "7d":
-        start_date = now - timedelta(days=7)
-        previous_start = start_date - timedelta(days=7)
-    elif range_param == "90d":
-        start_date = now - timedelta(days=90)
-        previous_start = start_date - timedelta(days=90)
-    else:
-        start_date = now - timedelta(days=30)
-        previous_start = start_date - timedelta(days=30)
-
-    current_orders = Order.objects.filter(
+    paid_orders = Order.objects.filter(
         ticket_type__event__organizer=request.user,
-        status="paid",
-        created_at__gte=start_date
+        status="paid"
     )
 
-    previous_orders = Order.objects.filter(
-        ticket_type__event__organizer=request.user,
-        status="paid",
-        created_at__gte=previous_start,
-        created_at__lt=start_date
-    )
+    # 🔹 DATE FILTER
+    if filter_type == "7d":
+        paid_orders = paid_orders.filter(
+            created_at__gte=timezone.now() - timedelta(days=7)
+        )
 
-    current_revenue = current_orders.aggregate(
+    elif filter_type == "30d":
+        paid_orders = paid_orders.filter(
+            created_at__gte=timezone.now() - timedelta(days=30)
+        )
+
+    elif filter_type == "12m":
+        paid_orders = paid_orders.filter(
+            created_at__gte=timezone.now() - timedelta(days=365)
+        )
+
+    # 🔹 TOTALS
+    total_revenue = paid_orders.aggregate(
         total=Sum("total_amount")
     )["total"] or Decimal("0")
 
-    previous_revenue = previous_orders.aggregate(
-        total=Sum("total_amount")
+    total_orders = paid_orders.count()
+
+    total_commission = paid_orders.aggregate(
+        total=Sum("commission_amount")
     )["total"] or Decimal("0")
 
-    current_orders_count = current_orders.count()
-    previous_orders_count = previous_orders.count()
+    total_organizer_earnings = paid_orders.aggregate(
+        total=Sum("organizer_amount")
+    )["total"] or Decimal("0")
 
-    def calculate_growth(current, previous):
-        if previous == 0:
-            return 100 if current > 0 else 0
-        return round(((current - previous) / previous) * 100, 2)
-
-    revenue_growth = calculate_growth(current_revenue, previous_revenue)
-    orders_growth = calculate_growth(current_orders_count, previous_orders_count)
-
-    monthly_revenue = (
-        current_orders
+    # 🔹 MONTHLY REVENUE
+    monthly = (
+        paid_orders
         .annotate(month=TruncMonth("created_at"))
         .values("month")
         .annotate(total=Sum("total_amount"))
         .order_by("month")
     )
 
+    monthly_revenue = [
+        {
+            "month": m["month"].strftime("%b %Y"),
+            "total": float(m["total"])
+        }
+        for m in monthly
+    ]
+
+    # 🔹 ORDERS TIMELINE
     orders_timeline = (
-        current_orders
+        paid_orders
         .annotate(month=TruncMonth("created_at"))
         .values("month")
         .annotate(orders=Count("id"))
         .order_by("month")
     )
 
+    orders_data = [
+        {
+            "month": o["month"].strftime("%b %Y"),
+            "orders": o["orders"]
+        }
+        for o in orders_timeline
+    ]
+
+    # 🔹 TOP EVENTS
     top_events = (
-        current_orders
+        paid_orders
         .values("ticket_type__event__title")
-        .annotate(total=Sum("total_amount"))
-        .order_by("-total")[:5]
+        .annotate(revenue=Sum("total_amount"))
+        .order_by("-revenue")[:5]
     )
 
-    payments_breakdown = (
-        Payment.objects
-        .filter(order__ticket_type__event__organizer=request.user)
-        .values("status")
-        .annotate(total=Count("id"))
-    )
+    top_events_data = [
+        {
+            "event": e["ticket_type__event__title"],
+            "revenue": float(e["revenue"])
+        }
+        for e in top_events
+    ]
 
-    refunds_count = Order.objects.filter(
-        ticket_type__event__organizer=request.user,
-        status="refunded"
-    ).count()
+    # 🔹 SIMPLE AI PREDICTION (Average monthly growth)
+    avg_monthly = total_revenue / 12 if total_revenue > 0 else 0
+    predicted_next_month = float(avg_monthly * Decimal("1.10"))
 
     return Response({
-        "total_revenue": float(current_revenue),
-        "revenue_growth": revenue_growth,
-        "total_orders": current_orders_count,
-        "orders_growth": orders_growth,
-        "total_organizer_earnings": float(current_revenue * Decimal("0.90")),
-        "earnings_growth": revenue_growth,
-        "monthly_revenue": list(monthly_revenue),
-        "orders_timeline": list(orders_timeline),
-        "top_events": list(top_events),
-        "payments_breakdown": list(payments_breakdown),
-        "refunds_count": refunds_count,
+        "currency": "SSP",
+        "total_revenue": float(total_revenue),
+        "total_orders": total_orders,
+        "total_commission": float(total_commission),
+        "total_organizer_earnings": float(total_organizer_earnings),
+        "monthly_revenue": monthly_revenue,
+        "orders_timeline": orders_data,
+        "top_events": top_events_data,
+        "predicted_next_month": predicted_next_month
     })
