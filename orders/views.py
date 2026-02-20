@@ -1,4 +1,6 @@
 from decimal import Decimal
+from datetime import timedelta
+
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Sum, Count
@@ -7,7 +9,6 @@ from django.db.models.functions import TruncMonth
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
 
 from .models import Order
 from tickets.models import TicketType, Ticket
@@ -15,14 +16,13 @@ from payments.models import Payment
 from events.models import Event
 
 
-# =====================================================
+# =====================================
 # CREATE ORDER (USER)
-# =====================================================
+# =====================================
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_order(request):
-
     ticket_id = request.data.get("ticket_id")
     quantity = int(request.data.get("quantity", 1))
 
@@ -64,14 +64,13 @@ def create_order(request):
     }, status=201)
 
 
-# =====================================================
+# =====================================
 # USER ORDERS
-# =====================================================
+# =====================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_orders(request):
-
     orders = (
         Order.objects
         .select_related("ticket_type__event")
@@ -93,14 +92,13 @@ def my_orders(request):
     return Response(data)
 
 
-# =====================================================
-# REQUEST REFUND (USER)
-# =====================================================
+# =====================================
+# REQUEST REFUND
+# =====================================
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def request_refund(request, order_id):
-
     try:
         order = Order.objects.select_related(
             "ticket_type__event"
@@ -135,95 +133,9 @@ def request_refund(request, order_id):
     })
 
 
-# =====================================================
-# ORGANIZER REFUND REQUESTS
-# =====================================================
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def organizer_refund_requests(request):
-
-    orders = (
-        Order.objects
-        .select_related("ticket_type__event", "user")
-        .filter(
-            ticket_type__event__organizer=request.user,
-            status="refund_requested"
-        )
-        .order_by("-created_at")
-    )
-
-    data = [{
-        "id": o.id,
-        "quantity": o.quantity,
-        "total_amount": float(o.total_amount),
-        "customer_email": o.user.email,
-        "ticket_type_name": o.ticket_type.name,
-        "event_title": o.ticket_type.event.title,
-        "created_at": o.created_at,
-    } for o in orders]
-
-    return Response(data)
-
-
-# =====================================================
-# ORGANIZER APPROVE REFUND
-# =====================================================
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def organizer_approve_refund(request, order_id):
-
-    try:
-        order = Order.objects.select_related(
-            "ticket_type__event", "user"
-        ).get(id=order_id)
-    except Order.DoesNotExist:
-        return Response({"error": "Order not found"}, status=404)
-
-    if order.ticket_type.event.organizer != request.user:
-        return Response({"error": "Forbidden"}, status=403)
-
-    if order.status != "refund_requested":
-        return Response({"error": "Invalid refund state"}, status=400)
-
-    if order.ticket_type.event.start_date <= timezone.now():
-        return Response({"error": "Event already started"}, status=400)
-
-    with transaction.atomic():
-
-        payment = Payment.objects.filter(
-            order=order,
-            status="success"
-        ).first()
-
-        if payment:
-            payment.status = "refunded"
-            payment.save(update_fields=["status"])
-
-        order.ticket_type.quantity_sold = max(
-            order.ticket_type.quantity_sold - order.quantity, 0
-        )
-        order.ticket_type.save(update_fields=["quantity_sold"])
-
-        Ticket.objects.filter(
-            user=order.user,
-            ticket_type=order.ticket_type
-        ).order_by("-created_at")[:order.quantity].delete()
-
-        order.status = "refunded"
-        order.save(update_fields=["status"])
-
-    return Response({
-        "message": "Refund approved successfully",
-        "order_id": order.id,
-        "status": order.status
-    })
-
-
-# =====================================================
+# =====================================
 # ORGANIZER ORDERS LIST
-# =====================================================
+# =====================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -252,9 +164,9 @@ def organizer_orders(request):
     return Response(data)
 
 
-# =====================================================
+# =====================================
 # ORGANIZER DASHBOARD STATS (BASIC)
-# =====================================================
+# =====================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -292,74 +204,195 @@ def organizer_dashboard_stats(request):
     })
 
 
-# =====================================================
+# =====================================
+# ORGANIZER REFUND REQUESTS
+# =====================================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def organizer_refund_requests(request):
+    orders = (
+        Order.objects
+        .select_related("ticket_type__event", "user")
+        .filter(
+            ticket_type__event__organizer=request.user,
+            status="refund_requested"
+        )
+        .order_by("-created_at")
+    )
+
+    data = [{
+        "id": o.id,
+        "quantity": o.quantity,
+        "total_amount": float(o.total_amount),
+        "customer_email": o.user.email,
+        "ticket_type_name": o.ticket_type.name,
+        "event_title": o.ticket_type.event.title,
+        "created_at": o.created_at,
+    } for o in orders]
+
+    return Response(data)
+
+
+
+# =====================================
+# ORGANIZER APPROVE REFUND
+# =====================================
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def organizer_approve_refund(request, order_id):
+
+    try:
+        order = Order.objects.select_related(
+            "ticket_type__event", "user"
+        ).get(id=order_id)
+    except Order.DoesNotExist:
+        return Response({"error": "Order not found"}, status=404)
+
+    # 🔐 Only event organizer can approve
+    if order.ticket_type.event.organizer != request.user:
+        return Response({"error": "Forbidden"}, status=403)
+
+    if order.status != "refund_requested":
+        return Response({"error": "Invalid refund state"}, status=400)
+
+    if order.ticket_type.event.start_date <= timezone.now():
+        return Response({"error": "Event already started"}, status=400)
+
+    with transaction.atomic():
+
+        payment = Payment.objects.filter(
+            order=order,
+            status="success"
+        ).first()
+
+        if payment:
+            payment.status = "refunded"
+            payment.save(update_fields=["status"])
+
+        # restore stock
+        order.ticket_type.quantity_sold = max(
+            order.ticket_type.quantity_sold - order.quantity, 0
+        )
+        order.ticket_type.save(update_fields=["quantity_sold"])
+
+        # delete tickets
+        Ticket.objects.filter(
+            user=order.user,
+            ticket_type=order.ticket_type
+        ).order_by("-created_at")[:order.quantity].delete()
+
+        order.status = "refunded"
+        order.save(update_fields=["status"])
+
+    return Response({
+        "message": "Refund approved successfully",
+        "order_id": order.id,
+        "status": order.status
+    })
+
+
+
+
+# =====================================
 # ORGANIZER ADVANCED ANALYTICS
-# =====================================================
+# =====================================
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organizer_advanced_analytics(request):
 
-    organizer = request.user
+    range_param = request.GET.get("range", "30d")
+    now = timezone.now()
 
-    paid_orders = Order.objects.filter(
-        ticket_type__event__organizer=organizer,
-        status="paid"
+    if range_param == "7d":
+        start_date = now - timedelta(days=7)
+        previous_start = start_date - timedelta(days=7)
+    elif range_param == "90d":
+        start_date = now - timedelta(days=90)
+        previous_start = start_date - timedelta(days=90)
+    else:
+        start_date = now - timedelta(days=30)
+        previous_start = start_date - timedelta(days=30)
+
+    current_orders = Order.objects.filter(
+        ticket_type__event__organizer=request.user,
+        status="paid",
+        created_at__gte=start_date
     )
 
-    # Monthly revenue
-    monthly = (
-        paid_orders
+    previous_orders = Order.objects.filter(
+        ticket_type__event__organizer=request.user,
+        status="paid",
+        created_at__gte=previous_start,
+        created_at__lt=start_date
+    )
+
+    current_revenue = current_orders.aggregate(
+        total=Sum("total_amount")
+    )["total"] or Decimal("0")
+
+    previous_revenue = previous_orders.aggregate(
+        total=Sum("total_amount")
+    )["total"] or Decimal("0")
+
+    current_orders_count = current_orders.count()
+    previous_orders_count = previous_orders.count()
+
+    def calculate_growth(current, previous):
+        if previous == 0:
+            return 100 if current > 0 else 0
+        return round(((current - previous) / previous) * 100, 2)
+
+    revenue_growth = calculate_growth(current_revenue, previous_revenue)
+    orders_growth = calculate_growth(current_orders_count, previous_orders_count)
+
+    monthly_revenue = (
+        current_orders
         .annotate(month=TruncMonth("created_at"))
         .values("month")
         .annotate(total=Sum("total_amount"))
         .order_by("month")
     )
 
-    monthly_revenue = [{
-        "month": m["month"].strftime("%Y-%m"),
-        "total": float(m["total"])
-    } for m in monthly if m["month"]]
+    orders_timeline = (
+        current_orders
+        .annotate(month=TruncMonth("created_at"))
+        .values("month")
+        .annotate(orders=Count("id"))
+        .order_by("month")
+    )
 
-    # Revenue per event
-    per_event = (
-        paid_orders
+    top_events = (
+        current_orders
         .values("ticket_type__event__title")
         .annotate(total=Sum("total_amount"))
-        .order_by("-total")
+        .order_by("-total")[:5]
     )
 
-    revenue_per_event = [{
-        "event": e["ticket_type__event__title"],
-        "total": float(e["total"])
-    } for e in per_event]
-
-    # Best selling ticket types
-    best_tickets = (
-        paid_orders
-        .values("ticket_type__name")
-        .annotate(total_sold=Sum("quantity"))
-        .order_by("-total_sold")
-    )
-
-    # Orders timeline
-    timeline = (
-        Order.objects
-        .filter(ticket_type__event__organizer=organizer)
-        .annotate(month=TruncMonth("created_at"))
-        .values("month")
+    payments_breakdown = (
+        Payment.objects
+        .filter(order__ticket_type__event__organizer=request.user)
+        .values("status")
         .annotate(total=Count("id"))
-        .order_by("month")
     )
 
-    orders_timeline = [{
-        "month": t["month"].strftime("%Y-%m"),
-        "orders": t["total"]
-    } for t in timeline if t["month"]]
+    refunds_count = Order.objects.filter(
+        ticket_type__event__organizer=request.user,
+        status="refunded"
+    ).count()
 
     return Response({
-        "monthly_revenue": monthly_revenue,
-        "revenue_per_event": revenue_per_event,
-        "best_selling_ticket_types": list(best_tickets),
-        "orders_timeline": orders_timeline,
+        "total_revenue": float(current_revenue),
+        "revenue_growth": revenue_growth,
+        "total_orders": current_orders_count,
+        "orders_growth": orders_growth,
+        "total_organizer_earnings": float(current_revenue * Decimal("0.90")),
+        "earnings_growth": revenue_growth,
+        "monthly_revenue": list(monthly_revenue),
+        "orders_timeline": list(orders_timeline),
+        "top_events": list(top_events),
+        "payments_breakdown": list(payments_breakdown),
+        "refunds_count": refunds_count,
     })
