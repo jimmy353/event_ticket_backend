@@ -6,6 +6,7 @@ from .views import (
     organizer_orders,
     organizer_refund_requests,
     organizer_approve_refund,
+    organizer_dashboard_stats
 )
 
 urlpatterns = [
@@ -19,4 +20,6 @@ urlpatterns = [
     path("organizer/", organizer_orders),
     path("organizer/refunds/", organizer_refund_requests),
     path("organizer/refunds/<int:order_id>/approve/", organizer_approve_refund),
+    path("organizer/orders/", organizer_orders),
+    path("organizer/dashboard/", organizer_dashboard_stats),
 ]
