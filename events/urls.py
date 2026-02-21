@@ -8,9 +8,11 @@ from .views import (
 
 urlpatterns = [
     path("", EventListAPIView.as_view(), name="events-list"),
-    path("organizer/", OrganizerEventListAPIView.as_view(), name="organizer-events"),
+
+    # 🔥 Change this from "organizer/" to "my/"
+    path("my/", OrganizerEventListAPIView.as_view(), name="organizer-events"),
+
     path("create/", OrganizerCreateEventAPIView.as_view(), name="organizer-create-event"),
 
-    # update/delete/view single event
     path("<int:pk>/", OrganizerEventDetailAPIView.as_view(), name="organizer-event-detail"),
 ]
