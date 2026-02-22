@@ -31,6 +31,7 @@ ALLOWED_HOSTS = [
     "127.0.0.1",
     "localhost",
     "api.sirheartevents.com",
+    "https://dashboard.sirheartevents.com",
 ]
 
 load_dotenv()
@@ -228,6 +229,7 @@ CORS_ALLOW_CREDENTIALS = True
 # =========================
 CSRF_TRUSTED_ORIGINS = [
     "https://api.sirheartevents.com",
+    "https://dashboard.sirheartevents.com",
 ]
 
 
