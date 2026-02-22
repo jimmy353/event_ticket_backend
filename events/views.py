@@ -39,10 +39,10 @@ class OrganizerEventListAPIView(APIView):
 
     def get(self, request):
         events = (
-            Event.objects
-            .filter(organizer=request.user)
-            .order_by("-created_at")
-        )
+          Event.objects
+          .filter(organizer=request.user)
+          .order_by("-start_date")
+    )
 
         serializer = OrganizerEventSerializer(
             events,
