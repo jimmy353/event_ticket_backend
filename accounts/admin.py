@@ -20,17 +20,20 @@ def login_role(request):
     # ORGANIZER LOGIN
     if role == "organizer":
 
-        # check if request exists
-        try:
-            organizer_request = OrganizerRequest.objects.get(user=user)
-        except OrganizerRequest.DoesNotExist:
+        # 🔥 FIX: get latest request instead of .get()
+        organizer_request = (
+            OrganizerRequest.objects
+            .filter(user=user)
+            .order_by("-created_at")
+            .first()
+        )
+
+        if not organizer_request:
             return Response({"status": "not_requested"}, status=403)
 
-        # check verification
         if not user.is_active:
             return Response({"status": "not_verified"}, status=403)
 
-        # check status
         if organizer_request.status == "pending":
             return Response({"status": "pending"}, status=403)
 
@@ -39,6 +42,12 @@ def login_role(request):
 
         if organizer_request.status != "approved":
             return Response({"status": "not_requested"}, status=403)
+
+        # Optional safety: ensure role flag is correct
+        if not user.is_organizer:
+            user.is_organizer = True
+            user.is_customer = False
+            user.save(update_fields=["is_organizer", "is_customer"])
 
     # SUCCESS
     refresh = RefreshToken.for_user(user)
