@@ -204,7 +204,7 @@ class ResendOTPView(APIView):
 
 
 # ==========================================
-# LOGIN WITH ROLE (CUSTOMER + ORGANIZER)
+# LOGIN WITH ROLE (FIXED CLEAN VERSION)
 # ==========================================
 class LoginWithRoleView(APIView):
     permission_classes = [AllowAny]
@@ -222,7 +222,7 @@ class LoginWithRoleView(APIView):
 
         if role not in ["customer", "organizer"]:
             return Response(
-                {"detail": "Role must be customer or organizer"},
+                {"detail": "Invalid role"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -236,16 +236,13 @@ class LoginWithRoleView(APIView):
 
         if not user.is_verified:
             return Response(
-                {
-                    "detail": "Email not verified.",
-                    "status": "not_verified",
-                },
+                {"status": "not_verified"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # =============================
+        # ==========================
         # ORGANIZER LOGIN
-        # =============================
+        # ==========================
         if role == "organizer":
 
             req = (
@@ -257,62 +254,49 @@ class LoginWithRoleView(APIView):
 
             if not req:
                 return Response(
-                    {
-                        "detail": "You have not submitted an organizer request.",
-                        "status": "not_requested",
-                    },
+                    {"status": "not_requested"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
             if req.status == "pending":
                 return Response(
-                    {"detail": "Your organizer request is pending.", "status": "pending"},
+                    {"status": "pending"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
             if req.status == "rejected":
                 return Response(
-                    {"detail": "Your organizer request was rejected.", "status": "rejected"},
+                    {"status": "rejected"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if req.status == "approved":
-                if not user.is_organizer:
-                    user.is_organizer = True
-                    user.is_customer = False
-                    user.save(update_fields=["is_organizer", "is_customer"])
-
-                refresh = RefreshToken.for_user(user)
-
-                return Response(
-                    {
-                        "refresh": str(refresh),
-                        "access": str(refresh.access_token),
-                        "role": "organizer",
-                    },
-                    status=status.HTTP_200_OK,
-                )
-
-        # =============================
-        # CUSTOMER LOGIN
-        # =============================
-        if role == "customer":
-
-            if user.is_organizer:
-                return Response(
-                    {
-                        "detail": "This account is an organizer. Please switch to Organizer tab.",
-                        "status": "wrong_role",
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            # Approved
+            if not user.is_organizer:
+                user.is_organizer = True
+                user.save(update_fields=["is_organizer"])
 
             refresh = RefreshToken.for_user(user)
 
             return Response(
                 {
-                    "refresh": str(refresh),
                     "access": str(refresh.access_token),
+                    "refresh": str(refresh),
+                    "role": "organizer",
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        # ==========================
+        # CUSTOMER LOGIN
+        # ==========================
+        if role == "customer":
+
+            refresh = RefreshToken.for_user(user)
+
+            return Response(
+                {
+                    "access": str(refresh.access_token),
+                    "refresh": str(refresh),
                     "role": "customer",
                 },
                 status=status.HTTP_200_OK,
