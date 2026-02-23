@@ -1,59 +1,43 @@
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
-from django.contrib.auth import authenticate
-from rest_framework import status
-from .models import OrganizerRequest
-from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth import get_user_model
+from .models import OrganizerRequest, EmailOTP
+
+User = get_user_model()
 
 
-@api_view(["POST"])
-def login_role(request):
-    email = request.data.get("email")
-    password = request.data.get("password")
-    role = request.data.get("role")
+class UserAdmin(BaseUserAdmin):
+    ordering = ["email"]
+    list_display = ["email", "is_organizer", "is_verified", "is_staff"]
+    search_fields = ["email"]
 
-    user = authenticate(email=email, password=password)
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        ("Permissions", {
+            "fields": (
+                "is_active",
+                "is_staff",
+                "is_superuser",
+                "is_organizer",
+                "is_verified",
+            )
+        }),
+    )
 
-    if not user:
-        return Response({"detail": "Invalid credentials"}, status=400)
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": (
+                "email",
+                "password1",
+                "password2",
+                "is_staff",
+                "is_superuser",
+            ),
+        }),
+    )
 
-    # ORGANIZER LOGIN
-    if role == "organizer":
 
-        # 🔥 FIX: get latest request instead of .get()
-        organizer_request = (
-            OrganizerRequest.objects
-            .filter(user=user)
-            .order_by("-created_at")
-            .first()
-        )
-
-        if not organizer_request:
-            return Response({"status": "not_requested"}, status=403)
-
-        if not user.is_active:
-            return Response({"status": "not_verified"}, status=403)
-
-        if organizer_request.status == "pending":
-            return Response({"status": "pending"}, status=403)
-
-        if organizer_request.status == "rejected":
-            return Response({"status": "rejected"}, status=403)
-
-        if organizer_request.status != "approved":
-            return Response({"status": "not_requested"}, status=403)
-
-        # Optional safety: ensure role flag is correct
-        if not user.is_organizer:
-            user.is_organizer = True
-            user.is_customer = False
-            user.save(update_fields=["is_organizer", "is_customer"])
-
-    # SUCCESS
-    refresh = RefreshToken.for_user(user)
-
-    return Response({
-        "access": str(refresh.access_token),
-        "refresh": str(refresh),
-        "role": "organizer" if user.is_organizer else "customer"
-    })
+admin.site.register(User, UserAdmin)
+admin.site.register(OrganizerRequest)
+admin.site.register(EmailOTP)
