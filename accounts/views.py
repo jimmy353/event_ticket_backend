@@ -204,7 +204,7 @@ class ResendOTPView(APIView):
 
 
 # ==========================================
-# LOGIN (ORGANIZER ONLY)
+# LOGIN WITH ROLE (CUSTOMER + ORGANIZER)
 # ==========================================
 class LoginWithRoleView(APIView):
     permission_classes = [AllowAny]
@@ -212,10 +212,17 @@ class LoginWithRoleView(APIView):
     def post(self, request):
         email = request.data.get("email")
         password = request.data.get("password")
+        role = request.data.get("role")
 
         if not email or not password:
             return Response(
                 {"detail": "Email and password are required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if role not in ["customer", "organizer"]:
+            return Response(
+                {"detail": "Role must be customer or organizer"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -227,56 +234,78 @@ class LoginWithRoleView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
 
-        # Must be verified
         if not user.is_verified:
             return Response(
                 {
-                    "detail": "Email not verified. Please verify your email OTP first.",
+                    "detail": "Email not verified.",
                     "status": "not_verified",
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Must have organizer request
-        req = (
-            OrganizerRequest.objects
-            .filter(user=user)
-            .order_by("-created_at")
-            .first()
-        )
+        # =============================
+        # ORGANIZER LOGIN
+        # =============================
+        if role == "organizer":
 
-        if not req:
-            return Response(
-                {
-                    "detail": "You have not submitted an organizer request.",
-                    "status": "not_requested",
-                },
-                status=status.HTTP_403_FORBIDDEN,
+            req = (
+                OrganizerRequest.objects
+                .filter(user=user)
+                .order_by("-created_at")
+                .first()
             )
 
-        if req.status == "pending":
-            return Response(
-                {
-                    "detail": "Your organizer request is under review.",
-                    "status": "pending",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            if not req:
+                return Response(
+                    {
+                        "detail": "You have not submitted an organizer request.",
+                        "status": "not_requested",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
-        if req.status == "rejected":
-            return Response(
-                {
-                    "detail": "Your organizer request was rejected.",
-                    "status": "rejected",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            if req.status == "pending":
+                return Response(
+                    {"detail": "Your organizer request is pending.", "status": "pending"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
-        # Approved
-        if req.status == "approved":
-            if not user.is_organizer:
-                user.is_organizer = True
-                user.save(update_fields=["is_organizer"])
+            if req.status == "rejected":
+                return Response(
+                    {"detail": "Your organizer request was rejected.", "status": "rejected"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            if req.status == "approved":
+                if not user.is_organizer:
+                    user.is_organizer = True
+                    user.is_customer = False
+                    user.save(update_fields=["is_organizer", "is_customer"])
+
+                refresh = RefreshToken.for_user(user)
+
+                return Response(
+                    {
+                        "refresh": str(refresh),
+                        "access": str(refresh.access_token),
+                        "role": "organizer",
+                    },
+                    status=status.HTTP_200_OK,
+                )
+
+        # =============================
+        # CUSTOMER LOGIN
+        # =============================
+        if role == "customer":
+
+            if user.is_organizer:
+                return Response(
+                    {
+                        "detail": "This account is an organizer. Please switch to Organizer tab.",
+                        "status": "wrong_role",
+                    },
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
             refresh = RefreshToken.for_user(user)
 
@@ -284,38 +313,10 @@ class LoginWithRoleView(APIView):
                 {
                     "refresh": str(refresh),
                     "access": str(refresh.access_token),
-                    "role": "organizer",
+                    "role": "customer",
                 },
                 status=status.HTTP_200_OK,
             )
-
-# ==========================================
-# FORGOT PASSWORD (SEND RESET OTP)
-# ==========================================
-class ForgotPasswordView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        serializer = ForgotPasswordSerializer(data=request.data)
-
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        email = serializer.validated_data["email"]
-
-        # Delete old reset OTPs
-        EmailOTP.objects.filter(email=email, purpose="reset", is_used=False).delete()
-        otp_obj = EmailOTP.objects.create(email=email, purpose="reset")
-
-        ok, err = send_otp_email(email, otp_obj.otp_code, purpose="reset")
-
-        if not ok:
-            return Response(
-                {"message": "Failed to send reset OTP", "email_error": err},
-                status=status.HTTP_200_OK,
-            )
-
-        return Response({"message": "Password reset OTP sent to your email"}, status=status.HTTP_200_OK)
 
 
 # ==========================================

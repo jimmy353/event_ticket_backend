@@ -35,14 +35,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     full_name = models.CharField(max_length=255, blank=True)
     phone = models.CharField(max_length=30, blank=True)
 
-    # roles
+    # Roles
     is_customer = models.BooleanField(default=True)
     is_organizer = models.BooleanField(default=False)
 
-    # verification
-    is_verified = models.BooleanField(default=False)  # ✅ email verified or not
+    # Verification
+    is_verified = models.BooleanField(default=False)
 
-    # system fields
+    # System
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
 
