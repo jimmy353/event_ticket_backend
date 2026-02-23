@@ -241,55 +241,47 @@ class LoginWithRoleView(APIView):
             )
 
         # Organizer
-if role == "organizer":
+        if role == "organizer":
+            if user.is_organizer:
+                refresh = RefreshToken.for_user(user)
+                return Response(
+                    {
+                        "refresh": str(refresh),
+                        "access": str(refresh.access_token),
+                        "role": role,
+                        "status": "approved",
+                    },
+                    status=status.HTTP_200_OK,
+                )
 
-    # If already organizer (approved)
-    if user.is_organizer:
-        refresh = RefreshToken.for_user(user)
-        return Response(
-            {
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
-                "role": role,
-                "status": "approved",
-            },
-            status=status.HTTP_200_OK,
-        )
+            if OrganizerRequest.objects.filter(user=user).exists():
+                req = OrganizerRequest.objects.get(user=user)
 
-    # Get latest organizer request (FIXED)
-    req = (
-        OrganizerRequest.objects
-        .filter(user=user)
-        .order_by("-created_at")
-        .first()
-    )
+                if req.status == "pending":
+                    return Response(
+                        {
+                            "detail": "Your organizer request is pending. Please wait 1 to 3 days.",
+                            "status": "pending",
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
-    if req:
-        if req.status == "pending":
+                if req.status == "rejected":
+                    return Response(
+                        {
+                            "detail": "Your organizer request was rejected. Contact support.",
+                            "status": "rejected",
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
             return Response(
                 {
-                    "detail": "Your organizer request is pending. Please wait 1 to 3 days.",
-                    "status": "pending",
+                    "detail": "You have not submitted an organizer request yet.",
+                    "status": "not_requested",
                 },
                 status=status.HTTP_403_FORBIDDEN,
             )
-
-        if req.status == "rejected":
-            return Response(
-                {
-                    "detail": "Your organizer request was rejected. Contact support.",
-                    "status": "rejected",
-                },
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-    return Response(
-        {
-            "detail": "You have not submitted an organizer request yet.",
-            "status": "not_requested",
-        },
-        status=status.HTTP_403_FORBIDDEN,
-    )
 
         # Customer
         if role == "customer":
