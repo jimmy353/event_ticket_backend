@@ -303,6 +303,38 @@ class LoginWithRoleView(APIView):
             )
 
 
+
+# =============================
+# FORGOT PASSWORD
+# =============================
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        email = serializer.validated_data["email"]
+
+        EmailOTP.objects.filter(
+            email=email,
+            purpose="reset",
+            is_used=False
+        ).delete()
+
+        otp = EmailOTP.objects.create(email=email, purpose="reset")
+
+        send_email_sendgrid(
+            email,
+            "Reset Password",
+            f"Your reset OTP is {otp.otp_code}"
+        )
+
+        return Response({"message": "Reset OTP sent"})
+
+
 # ==========================================
 # RESET PASSWORD (VERIFY OTP + SET NEW PASSWORD)
 # ==========================================
