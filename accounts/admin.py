@@ -1,40 +1,50 @@
-from django.contrib import admin
-from django.contrib.auth import get_user_model
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+from django.contrib.auth import authenticate
+from rest_framework import status
 from .models import OrganizerRequest
-
-User = get_user_model()
-
-
-@admin.register(User)
-class UserAdmin(admin.ModelAdmin):
-    list_display = ("email", "is_customer", "is_organizer", "is_staff", "is_active")
-    list_filter = ("is_customer", "is_organizer", "is_staff", "is_active")
-    search_fields = ("email",)
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
-@admin.register(OrganizerRequest)
-class OrganizerRequestAdmin(admin.ModelAdmin):
-    list_display = ("user", "company_name", "momo_number", "status", "created_at")
-    list_filter = ("status",)
-    search_fields = ("user__email", "company_name")
+@api_view(["POST"])
+def login_role(request):
+    email = request.data.get("email")
+    password = request.data.get("password")
+    role = request.data.get("role")
 
-    actions = ["approve_requests", "reject_requests"]
+    user = authenticate(email=email, password=password)
 
-    def approve_requests(self, request, queryset):
-        for req in queryset:
-            req.status = "approved"
-            req.save()
+    if not user:
+        return Response({"detail": "Invalid credentials"}, status=400)
 
-            user = req.user
-            user.is_organizer = True
-            user.is_customer = False
-            user.save()
+    # ORGANIZER LOGIN
+    if role == "organizer":
 
-    approve_requests.short_description = "Approve selected organizer requests"
+        # check if request exists
+        try:
+            organizer_request = OrganizerRequest.objects.get(user=user)
+        except OrganizerRequest.DoesNotExist:
+            return Response({"status": "not_requested"}, status=403)
 
-    def reject_requests(self, request, queryset):
-        for req in queryset:
-            req.status = "rejected"
-            req.save()
+        # check verification
+        if not user.is_active:
+            return Response({"status": "not_verified"}, status=403)
 
-    reject_requests.short_description = "Reject selected organizer requests"
+        # check status
+        if organizer_request.status == "pending":
+            return Response({"status": "pending"}, status=403)
+
+        if organizer_request.status == "rejected":
+            return Response({"status": "rejected"}, status=403)
+
+        if organizer_request.status != "approved":
+            return Response({"status": "not_requested"}, status=403)
+
+    # SUCCESS
+    refresh = RefreshToken.for_user(user)
+
+    return Response({
+        "access": str(refresh.access_token),
+        "refresh": str(refresh),
+        "role": "organizer" if user.is_organizer else "customer"
+    })
