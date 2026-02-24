@@ -18,7 +18,9 @@ class Payout(models.Model):
     event = models.ForeignKey(
         "events.Event",
         on_delete=models.CASCADE,
-        related_name="payouts"
+        related_name="payouts",
+        null=True,
+        blank=True,
     )
 
     amount = models.DecimalField(max_digits=12, decimal_places=2)
