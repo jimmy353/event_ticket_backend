@@ -28,7 +28,6 @@ def initiate_payment(request):
 
     order_id = request.data.get("order_id")
     provider = request.data.get("provider")
-
     phone_number = request.data.get("phone_number") or request.data.get("phone")
 
     if not order_id:
@@ -108,13 +107,14 @@ def initiate_payment(request):
         payment.save(update_fields=["status"])
 
         order.status = "paid"
-        order.save(update_fields=["status"])
+        order.payment_status = "PAID"
+        order.payment_method = provider.upper()
+        order.save(update_fields=["status", "payment_status", "payment_method"])
 
         ticket_type.quantity_sold += order.quantity
         ticket_type.save(update_fields=["quantity_sold"])
 
         created_tickets = []
-
         for _ in range(order.quantity):
             ticket = Ticket.objects.create(
                 user=request.user,
@@ -153,7 +153,12 @@ def initiate_payment(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organizer_payments(request):
-    payments = (
+    """
+    GET /api/payments/organizer/?event=<event_id>
+    """
+    event_id = request.GET.get("event")
+
+    qs = (
         Payment.objects
         .select_related(
             "order",
@@ -165,21 +170,37 @@ def organizer_payments(request):
         .order_by("-created_at")
     )
 
+    if event_id:
+        qs = qs.filter(order__ticket_type__event_id=event_id)
+
     data = []
-    for p in payments:
+    for p in qs:
+        order = p.order
+        ticket_type = order.ticket_type
+        event = ticket_type.event
+
         data.append({
             "id": p.id,
             "provider": p.provider,
             "phone": p.phone,
-            "amount": float(p.amount),
             "status": p.status,
             "created_at": p.created_at,
 
-            "order_id": p.order.id,
-            "customer_email": p.order.user.email,
+            "order_id": order.id,
+            "quantity": order.quantity,
+            "customer_email": order.user.email if order.user else None,
 
-            "ticket_type_name": p.order.ticket_type.name,
-            "event_title": p.order.ticket_type.event.title,
+            "ticket_type_name": ticket_type.name,
+            "event_id": event.id,
+            "event_title": event.title,
+
+            # ✅ IMPORTANT: Use breakdown from ORDER (your model already stores it)
+            "amount": float(order.total_amount),
+            "commission": float(order.commission_amount),
+            "organizer_amount": float(order.organizer_amount),
+
+            # placeholder until you wire real payouts
+            "payout_status": "unpaid",
         })
 
     return Response(data, status=status.HTTP_200_OK)
