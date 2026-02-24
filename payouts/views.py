@@ -6,7 +6,7 @@ from rest_framework.response import Response
 
 from .models import Payout
 from .serializers import PayoutSerializer
-from payments.models import Payment
+from orders.models import Order
 from events.models import Event
 
 
@@ -25,7 +25,7 @@ class MyPayoutsAPIView(generics.ListAPIView):
 
 
 # =====================================================
-# 2️⃣ REQUEST WITHDRAWAL
+# 2️⃣ REQUEST WITHDRAWAL (CORRECT LOGIC)
 # =====================================================
 
 @api_view(["POST"])
@@ -59,19 +59,19 @@ def request_payout(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Get unpaid payments
-    payments = Payment.objects.filter(
-        event=event,
-        payout_status="unpaid"
+    # Get PAID orders for this event
+    orders = Order.objects.filter(
+        ticket_type__event=event,
+        status="paid"
     )
 
-    if not payments.exists():
+    if not orders.exists():
         return Response(
-            {"error": "No unpaid earnings available."},
+            {"error": "No earnings available."},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    total = payments.aggregate(
+    total = orders.aggregate(
         total=Sum("organizer_amount")
     )["total"] or 0
 
@@ -85,14 +85,13 @@ def request_payout(request):
         organizer=user,
         event=event,
         amount=total,
-        status="pending"
+        status="pending",
+        note=f"Payout request for {event.title}"
     )
-
-    payments.update(payout_status="pending")
 
     return Response({
         "message": "Withdrawal request submitted successfully.",
-        "total": total,
+        "total": float(total),
         "payout_id": payout.id
     })
 
@@ -121,12 +120,6 @@ def approve_payout(request, payout_id):
     payout.status = "paid"
     payout.paid_at = timezone.now()
     payout.save()
-
-    # Mark related payments as paid
-    Payment.objects.filter(
-        event=payout.event,
-        payout_status="pending"
-    ).update(payout_status="paid")
 
     return Response({
         "message": "Payout approved successfully."
