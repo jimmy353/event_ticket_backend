@@ -34,7 +34,7 @@ class Order(models.Model):
         default="pending"
     )
 
-    # ✅ FIX: These fields must be inside the model body (not inside __str__)
+    # ✅ Correct position
     momo_reference_id = models.CharField(max_length=100, blank=True, null=True)
     payment_status = models.CharField(max_length=20, default="PENDING")
     payment_method = models.CharField(max_length=30, default="MOMO")
