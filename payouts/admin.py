@@ -5,12 +5,24 @@ from .models import Payout
 
 @admin.action(description="Mark selected payouts as PAID")
 def mark_as_paid(modeladmin, request, queryset):
-    queryset.update(status="paid", paid_at=timezone.now())
+    queryset.update(
+        status="paid",
+        paid_at=timezone.now()
+    )
 
 
 @admin.register(Payout)
 class PayoutAdmin(admin.ModelAdmin):
-    list_display = ("id", "organizer", "amount", "status", "created_at", "paid_at")
+    list_display = (
+        "id",
+        "organizer",
+        "event",
+        "amount",
+        "status",
+        "created_at",
+        "paid_at",
+    )
+
     list_filter = ("status", "created_at")
-    search_fields = ("organizer__email",)
+    search_fields = ("organizer__email", "event__title")
     actions = [mark_as_paid]

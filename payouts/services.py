@@ -1,6 +1,8 @@
 from decimal import Decimal
 from django.utils import timezone
-from orders.models import Order
+from django.db.models import Sum
+
+from payments.models import Payment
 from payouts.models import Payout
 from events.models import Event
 
@@ -8,28 +10,47 @@ from events.models import Event
 def process_event_payouts():
     """
     Auto payout for events that already finished.
-    Runs safely (won't duplicate payouts).
+    Uses Payment model (real money source).
+    Safe from duplication.
     """
 
     now = timezone.now()
 
-    finished_events = Event.objects.filter(end_date__lt=now, payout_done=False)
+    finished_events = Event.objects.filter(
+        end_date__lt=now,
+        payout_done=False
+    )
 
     for event in finished_events:
-        paid_orders = Order.objects.filter(event=event, status="paid")
 
-        total_organizer_amount = Decimal("0.00")
+        # Only collect successful & unpaid payments
+        payments = Payment.objects.filter(
+            order__event=event,
+            status="success",
+            payout_status="unpaid"
+        )
 
-        for order in paid_orders:
-            total_organizer_amount += order.organizer_amount
+        if not payments.exists():
+            event.payout_done = True
+            event.save()
+            continue
+
+        total_organizer_amount = payments.aggregate(
+            total=Sum("organizer_amount")
+        )["total"] or Decimal("0.00")
 
         if total_organizer_amount > 0:
-            Payout.objects.create(
+
+            payout = Payout.objects.create(
                 organizer=event.organizer,
+                event=event,
                 amount=total_organizer_amount,
                 status="pending",
                 note=f"Auto payout for event: {event.title}",
             )
+
+            # Lock payments
+            payments.update(payout_status="pending")
 
         event.payout_done = True
         event.save()

@@ -14,12 +14,34 @@ class Payment(models.Model):
         ("refunded", "Refunded"),
     )
 
-    order = models.ForeignKey("orders.Order", on_delete=models.CASCADE)
+    PAYOUT_STATUS = (
+        ("unpaid", "Unpaid"),
+        ("pending", "Pending"),
+        ("paid", "Paid"),
+    )
+
+    order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.CASCADE,
+        related_name="payments"
+    )
+
     provider = models.CharField(max_length=20, choices=PROVIDERS)
 
     phone = models.CharField(max_length=20, null=True, blank=True)
 
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+
+    # 🔥 NEW FIELDS FOR FINANCE SYSTEM
+    commission = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    organizer_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    payout_status = models.CharField(
+        max_length=20,
+        choices=PAYOUT_STATUS,
+        default="unpaid"
+    )
+
     status = models.CharField(max_length=20, choices=STATUS, default="pending")
 
     created_at = models.DateTimeField(auto_now_add=True)
