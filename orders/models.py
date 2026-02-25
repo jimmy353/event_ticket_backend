@@ -34,6 +34,9 @@ class Order(models.Model):
         default="pending"
     )
 
+    is_withdrawn = models.BooleanField(
+        default=False)
+
     # ✅ Correct position
     momo_reference_id = models.CharField(max_length=100, blank=True, null=True)
     payment_status = models.CharField(max_length=20, default="PENDING")

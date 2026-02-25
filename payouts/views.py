@@ -61,8 +61,9 @@ def request_payout(request):
 
     # Get PAID orders only
     orders = Order.objects.filter(
-        ticket_type__event=event,
-        status="paid"
+    ticket_type__event=event,
+    status="paid",
+    is_withdrawn=False   # 🔥 Only unpaid earnings
     )
 
     if not orders.exists():
@@ -116,7 +117,12 @@ def approve_payout(request, reference):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    payout.mark_paid()
+    # Mark related orders as withdrawn
+    Order.objects.filter(
+    ticket_type__event=payout.event,
+    status="paid",
+    is_withdrawn=False
+    ).update(is_withdrawn=True)
 
     return Response({
         "message": "Payout approved successfully.",
