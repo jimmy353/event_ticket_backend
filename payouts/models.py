@@ -4,6 +4,10 @@ from django.utils import timezone
 import uuid
 
 
+def generate_payout_reference():
+    return f"PAYOUT-{uuid.uuid4().hex[:10].upper()}"
+
+
 class Payout(models.Model):
 
     STATUS_CHOICES = (
@@ -12,6 +16,17 @@ class Payout(models.Model):
         ("paid", "Paid"),
         ("failed", "Failed"),
         ("cancelled", "Cancelled"),
+    )
+
+    # ===============================
+    # UNIQUE REFERENCE
+    # ===============================
+    reference = models.CharField(
+        max_length=40,
+        unique=True,
+        editable=False,
+        null=True,
+        blank=True
     )
 
     # ===============================
@@ -34,8 +49,6 @@ class Payout(models.Model):
     # ===============================
     # FINANCIAL DATA
     # ===============================
-    
-
     amount = models.DecimalField(
         max_digits=12,
         decimal_places=2
@@ -92,5 +105,10 @@ class Payout(models.Model):
         self.failure_reason = reason
         self.save(update_fields=["status", "failure_reason"])
 
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = generate_payout_reference()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Payout #{self.id} - {self.organizer.email} - {self.amount}"
+        return f"{self.reference} - {self.organizer.email} - {self.amount}"

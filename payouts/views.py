@@ -25,7 +25,7 @@ class MyPayoutsAPIView(generics.ListAPIView):
 
 
 # =====================================================
-# 2️⃣ REQUEST WITHDRAWAL (CORRECT LOGIC)
+# 2️⃣ REQUEST WITHDRAWAL (SECURE VERSION)
 # =====================================================
 
 @api_view(["POST"])
@@ -59,7 +59,7 @@ def request_payout(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Get PAID orders for this event
+    # Get PAID orders only
     orders = Order.objects.filter(
         ticket_type__event=event,
         status="paid"
@@ -85,26 +85,25 @@ def request_payout(request):
         organizer=user,
         event=event,
         amount=total,
-        status="pending",
         note=f"Payout request for {event.title}"
     )
 
     return Response({
         "message": "Withdrawal request submitted successfully.",
         "total": float(total),
-        "payout_id": payout.id
+        "reference": payout.reference,  # 🔥 RETURN REFERENCE
     })
 
 
 # =====================================================
-# 3️⃣ ADMIN APPROVE PAYOUT
+# 3️⃣ ADMIN APPROVE PAYOUT (USING REFERENCE)
 # =====================================================
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])
-def approve_payout(request, payout_id):
+def approve_payout(request, reference):
     try:
-        payout = Payout.objects.get(id=payout_id)
+        payout = Payout.objects.get(reference=reference)
     except Payout.DoesNotExist:
         return Response(
             {"error": "Payout not found."},
@@ -117,10 +116,9 @@ def approve_payout(request, payout_id):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    payout.status = "paid"
-    payout.paid_at = timezone.now()
-    payout.save()
+    payout.mark_paid()
 
     return Response({
-        "message": "Payout approved successfully."
+        "message": "Payout approved successfully.",
+        "reference": payout.reference
     })
