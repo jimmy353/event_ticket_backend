@@ -1,221 +1,124 @@
+from datetime import timedelta
 from django.utils import timezone
+from django.db import transaction
+
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework import status
 
-from .models import RefundRequest
-from .serializers import RefundRequestSerializer
 from orders.models import Order
-from tickets.models import Ticket
 from payments.models import Payment
+from tickets.models import Ticket
+from wallets.models import OrganizerWallet
+
+from .models import Refund
 
 
 # ===============================
-# USER CREATE REFUND REQUEST
+# USER REQUEST REFUND
 # ===============================
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def create_refund_request(request):
+def request_refund(request):
     order_id = request.data.get("order_id")
     reason = request.data.get("reason", "")
 
     if not order_id:
-        return Response(
-            {"error": "order_id is required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "order_id required"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        order = Order.objects.select_related(
-            "ticket_type",
-            "ticket_type__event"
-        ).get(id=order_id, user=request.user)
+        order = Order.objects.select_related("event").get(id=order_id, user=request.user)
     except Order.DoesNotExist:
-        return Response(
-            {"error": "Order not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
+        return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if order.status != "paid":
+        return Response({"error": "Only paid orders can be refunded"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if getattr(order, "is_withdrawn", False):
+        return Response({"error": "Cannot refund an order that was already withdrawn"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # prevent duplicate refund
+    if hasattr(order, "refund"):
+        return Response({"error": "Refund already requested for this order"}, status=status.HTTP_400_BAD_REQUEST)
+
+    event = order.event
+
+    # ✅ Refund allowed only until 1 day before event start
+    if timezone.now() > (event.start_date - timedelta(days=1)):
         return Response(
-            {"error": "Only paid orders can request refund"},
+            {"error": "Refund allowed only up to 1 day before event start"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    if RefundRequest.objects.filter(order=order).exists():
-        return Response(
-            {"error": "Refund request already exists"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    refund = RefundRequest.objects.create(
-        user=request.user,
+    refund = Refund.objects.create(
         order=order,
+        requested_by=request.user,
         reason=reason,
-        status="pending"
+        amount=order.total_amount,
+        status="pending",
     )
 
+    # ✅ expected refund date (3–7 days, we’ll set 5 days average)
+    refund.set_expected_refund_date()
+
     return Response(
-        RefundRequestSerializer(refund).data,
+        {
+            "message": "Refund request submitted",
+            "refund_status": refund.status,
+            "expected_refund_date": refund.expected_refund_date,
+        },
         status=status.HTTP_201_CREATED
     )
 
 
 # ===============================
-# ORGANIZER VIEW REFUND REQUESTS
+# ADMIN APPROVE REFUND
 # ===============================
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def organizer_refund_requests(request):
-    refunds = RefundRequest.objects.filter(
-        order__ticket_type__event__organizer=request.user
-    ).order_by("-created_at")
-
-    serializer = RefundRequestSerializer(refunds, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-# ===============================
-# ORGANIZER APPROVE REFUND
-# ===============================
-
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def approve_refund(request, refund_id):
+@permission_classes([IsAdminUser])
+@transaction.atomic
+def approve_refund(request, order_id):
     try:
-        refund = RefundRequest.objects.select_related(
-            "order",
-            "order__ticket_type",
-            "order__ticket_type__event"
-        ).get(id=refund_id)
-    except RefundRequest.DoesNotExist:
-        return Response(
-            {"error": "Refund request not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    order = refund.order
-    event = order.ticket_type.event
-
-    # 🔐 Organizer security
-    if event.organizer != request.user:
-        return Response(
-            {"error": "Not allowed"},
-            status=status.HTTP_403_FORBIDDEN
-        )
+        refund = Refund.objects.select_for_update().select_related("order", "order__event").get(order_id=order_id)
+    except Refund.DoesNotExist:
+        return Response({"error": "Refund not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if refund.status != "pending":
-        return Response(
-            {"error": "Refund already reviewed"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "Refund already processed"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ❌ Block if tickets already used
-    used_ticket_exists = Ticket.objects.filter(
-        user=order.user,
-        ticket_type=order.ticket_type,
-        is_used=True
-    ).exists()
+    order = refund.order
 
-    if used_ticket_exists:
-        refund.status = "rejected"
-        refund.reviewed_at = timezone.now()
-        refund.save(update_fields=["status", "reviewed_at"])
+    # ✅ Safety checks
+    if getattr(order, "is_withdrawn", False):
+        return Response({"error": "Cannot refund withdrawn order"}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            {"error": "Refund rejected. Ticket already used."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    # ✅ Mark payment refunded
-    payment = Payment.objects.filter(order=order, status="success").first()
-    if payment:
-        payment.status = "refunded"
-        payment.save(update_fields=["status"])
-
-    # ✅ Cancel tickets
-    tickets = Ticket.objects.filter(
-        user=order.user,
-        ticket_type=order.ticket_type,
-        is_cancelled=False
-    ).order_by("-created_at")[:order.quantity]
-
-    for t in tickets:
-        t.is_cancelled = True
-        t.cancelled_at = timezone.now()
-        t.save(update_fields=["is_cancelled", "cancelled_at"])
-
-    # ✅ Restore stock
-    order.ticket_type.quantity_sold = max(
-        order.ticket_type.quantity_sold - order.quantity,
-        0
-    )
-    order.ticket_type.save(update_fields=["quantity_sold"])
-
-    # ✅ Update order status
+    # 1️⃣ Mark order refunded
     order.status = "refunded"
     order.save(update_fields=["status"])
 
-    # ✅ Update refund request
+    # 2️⃣ Mark payment refunded (if you store payments by order)
+    Payment.objects.filter(order=order).update(status="refunded")
+
+    # 3️⃣ Delete tickets issued for this order (if your Ticket model links to order, use that)
+    # If Ticket does NOT link to order, we delete by user + ticket_type as fallback
+    if hasattr(order, "ticket_type") and order.ticket_type_id:
+        Ticket.objects.filter(user=order.user, ticket_type_id=order.ticket_type_id).delete()
+
+    # 4️⃣ Adjust organizer wallet (locked balance reduced)
+    wallet, _ = OrganizerWallet.objects.get_or_create(organizer=order.event.organizer)
+    wallet.locked_balance = max(wallet.locked_balance - order.organizer_amount, 0)
+    wallet.save(update_fields=["locked_balance"])
+
+    # 5️⃣ Mark refund approved (processed later by momo)
     refund.status = "approved"
-    refund.reviewed_at = timezone.now()
-    refund.save(update_fields=["status", "reviewed_at"])
+    refund.save(update_fields=["status"])
 
     return Response(
         {
             "message": "Refund approved successfully",
-            "refund": RefundRequestSerializer(refund).data
-        },
-        status=status.HTTP_200_OK
-    )
-
-
-# ===============================
-# ORGANIZER REJECT REFUND
-# ===============================
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def reject_refund(request, refund_id):
-    try:
-        refund = RefundRequest.objects.select_related(
-            "order",
-            "order__ticket_type",
-            "order__ticket_type__event"
-        ).get(id=refund_id)
-    except RefundRequest.DoesNotExist:
-        return Response(
-            {"error": "Refund request not found"},
-            status=status.HTTP_404_NOT_FOUND
-        )
-
-    order = refund.order
-    event = order.ticket_type.event
-
-    # 🔐 Organizer security
-    if event.organizer != request.user:
-        return Response(
-            {"error": "Not allowed"},
-            status=status.HTTP_403_FORBIDDEN
-        )
-
-    if refund.status != "pending":
-        return Response(
-            {"error": "Refund already reviewed"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    refund.status = "rejected"
-    refund.reviewed_at = timezone.now()
-    refund.save(update_fields=["status", "reviewed_at"])
-
-    return Response(
-        {
-            "message": "Refund rejected",
-            "refund": RefundRequestSerializer(refund).data
+            "refund_status": refund.status,
+            "expected_refund_date": refund.expected_refund_date,
         },
         status=status.HTTP_200_OK
     )
