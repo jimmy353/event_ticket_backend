@@ -1,18 +1,12 @@
 from django.urls import path
 from .views import (
     request_refund,
-    my_refunds,
-    admin_refunds,
-    approve_refund,
-    mark_refund_paid,
+    organizer_refunds,
+    admin_approve_refund,
 )
 
 urlpatterns = [
     path("request/", request_refund),
-    path("me/", my_refunds),
-
-    # admin
-    path("admin/", admin_refunds),
-    path("admin/<str:reference>/approve/", approve_refund),
-    path("admin/<str:reference>/paid/", mark_refund_paid),
+    path("organizer/", organizer_refunds),
+    path("admin/<int:refund_id>/approve/", admin_approve_refund),
 ]
