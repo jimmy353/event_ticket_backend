@@ -18,8 +18,26 @@ class TicketType(models.Model):
 class Ticket(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="tickets")
-    ticket_type = models.ForeignKey(TicketType, on_delete=models.CASCADE, related_name="tickets")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="tickets"
+    )
+
+    ticket_type = models.ForeignKey(
+        "tickets.TicketType",
+        on_delete=models.CASCADE,
+        related_name="tickets"
+    )
+
+    # ✅ REFUND SUPPORT (LINK TICKET TO ORDER)
+    order = models.ForeignKey(
+        "orders.Order",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tickets",
+    )
 
     ticket_code = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
@@ -28,7 +46,7 @@ class Ticket(models.Model):
     is_used = models.BooleanField(default=False)
     used_at = models.DateTimeField(null=True, blank=True)
 
-    # ✅ NEW (REFUND SUPPORT)
+    # ✅ REFUND SUPPORT
     is_cancelled = models.BooleanField(default=False)
     cancelled_at = models.DateTimeField(null=True, blank=True)
 

@@ -1,57 +1,68 @@
-from django.db import models
-from django.conf import settings
-from django.utils import timezone
+import uuid
 from datetime import timedelta
 
-from orders.models import Order
+from django.db import models
+from django.utils import timezone
+
+
+def generate_refund_reference():
+    return f"REF-{uuid.uuid4().hex[:10].upper()}"
 
 
 class Refund(models.Model):
-
     STATUS_CHOICES = (
-        ("pending", "Pending Review"),
+        ("requested", "Requested"),
         ("approved", "Approved"),
-        ("processed", "Processed"),
+        ("processing", "Processing"),
+        ("paid", "Paid"),
         ("rejected", "Rejected"),
     )
 
+    reference = models.CharField(max_length=40, unique=True, editable=False, blank=True, null=True)
+
     order = models.OneToOneField(
-        Order,
+        "orders.Order",
         on_delete=models.CASCADE,
-        related_name="refund"
+        related_name="refund",
     )
 
-    requested_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE
-    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
 
-    reason = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="requested")
 
-    amount = models.DecimalField(
-        max_digits=12,
-        decimal_places=2
-    )
+    reason = models.TextField(blank=True, null=True)
+    admin_note = models.TextField(blank=True, null=True)
 
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default="pending"
-    )
+    provider = models.CharField(max_length=30, blank=True, null=True)          # MOMO / MGURUSH
+    provider_reference = models.CharField(max_length=255, blank=True, null=True)
 
-    expected_refund_date = models.DateField(null=True, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(blank=True, null=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
-    processed_at = models.DateTimeField(null=True, blank=True)
+    # 3–7 days settlement estimate
+    expected_paid_from = models.DateTimeField(blank=True, null=True)
+    expected_paid_to = models.DateTimeField(blank=True, null=True)
 
-    def mark_processed(self):
-        self.status = "processed"
-        self.processed_at = timezone.now()
-        self.save(update_fields=["status", "processed_at"])
+    paid_at = models.DateTimeField(blank=True, null=True)
 
-    def set_expected_refund_date(self):
-        self.expected_refund_date = timezone.now().date() + timedelta(days=5)
-        self.save(update_fields=["expected_refund_date"])
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = generate_refund_reference()
+        super().save(*args, **kwargs)
+
+    def mark_processing(self):
+        self.status = "processing"
+        now = timezone.now()
+        self.expected_paid_from = now + timedelta(days=3)
+        self.expected_paid_to = now + timedelta(days=7)
+        self.save(update_fields=["status", "expected_paid_from", "expected_paid_to"])
+
+    def mark_paid(self, provider_reference=None):
+        self.status = "paid"
+        self.paid_at = timezone.now()
+        if provider_reference:
+            self.provider_reference = provider_reference
+        self.save(update_fields=["status", "paid_at", "provider_reference"])
 
     def __str__(self):
-        return f"Refund - Order #{self.order.id}"
+        return f"{self.reference} - Order #{self.order_id} - {self.status}"

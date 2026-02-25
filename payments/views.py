@@ -1,3 +1,5 @@
+# payments/views.py
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -50,12 +52,13 @@ def initiate_payment(request):
             order = (
                 Order.objects
                 .select_for_update()
-                .select_related("ticket_type")
+                .select_related("ticket_type", "ticket_type__event")
                 .get(id=order_id, user=request.user)
             )
         except Order.DoesNotExist:
             return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # ✅ If already paid, return existing tickets
         if order.status == "paid":
             latest_tickets = (
                 Ticket.objects
@@ -79,6 +82,7 @@ def initiate_payment(request):
                 status=status.HTTP_200_OK,
             )
 
+        # lock ticket type
         ticket_type = (
             order.ticket_type.__class__.objects
             .select_for_update()
@@ -92,6 +96,7 @@ def initiate_payment(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # ✅ Create payment record
         payment = Payment.objects.create(
             order=order,
             provider=provider,
@@ -116,9 +121,11 @@ def initiate_payment(request):
 
         created_tickets = []
         for _ in range(order.quantity):
+            # ✅ IMPORTANT: link ticket to the order (refund system needs this)
             ticket = Ticket.objects.create(
                 user=request.user,
                 ticket_type=ticket_type,
+                order=order,  # 🔥 THIS IS THE FIX
             )
 
             ticket.qr_code.save(
@@ -153,6 +160,9 @@ def initiate_payment(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organizer_payments(request):
+    """
+    GET /api/payments/organizer/?event=<event_id>
+    """
     event_id = request.GET.get("event")
 
     qs = (
@@ -165,7 +175,6 @@ def organizer_payments(request):
         )
         .filter(
             order__ticket_type__event__organizer=request.user,
-            order__status="paid"   # 🔥 ONLY PAID ORDERS
         )
         .order_by("-created_at")
     )
@@ -174,12 +183,22 @@ def organizer_payments(request):
         qs = qs.filter(order__ticket_type__event_id=event_id)
 
     data = []
-
     for p in qs:
         order = p.order
+        event = order.ticket_type.event
 
-        payout_status = "paid" if order.is_withdrawn else "unpaid"
+        # ✅ payout/refund status logic (frontend will now update correctly)
+        if order.status == "refunded":
+            payout_status = "refunded"
+        elif order.status == "refund_requested":
+            payout_status = "refund_requested"
+        elif order.is_withdrawn:
+            payout_status = "paid"
+        else:
+            payout_status = "unpaid"
 
+        # ✅ If order is refunded, still show it (so organizer sees it),
+        # but it will NOT count as withdrawable anymore.
         data.append({
             "id": p.id,
             "provider": p.provider,
@@ -192,8 +211,8 @@ def organizer_payments(request):
             "customer_email": order.user.email if order.user else None,
 
             "ticket_type_name": order.ticket_type.name,
-            "event_id": order.ticket_type.event.id,
-            "event_title": order.ticket_type.event.title,
+            "event_id": event.id,
+            "event_title": event.title,
 
             "amount": float(order.total_amount),
             "commission": float(order.commission_amount),
@@ -202,4 +221,4 @@ def organizer_payments(request):
             "payout_status": payout_status,
         })
 
-    return Response(data)
+    return Response(data, status=status.HTTP_200_OK)
