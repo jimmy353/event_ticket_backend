@@ -153,9 +153,6 @@ def initiate_payment(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organizer_payments(request):
-    """
-    GET /api/payments/organizer/?event=<event_id>
-    """
     event_id = request.GET.get("event")
 
     qs = (
@@ -166,7 +163,10 @@ def organizer_payments(request):
             "order__ticket_type",
             "order__ticket_type__event"
         )
-        .filter(order__ticket_type__event__organizer=request.user)
+        .filter(
+            order__ticket_type__event__organizer=request.user,
+            order__status="paid"   # 🔥 ONLY PAID ORDERS
+        )
         .order_by("-created_at")
     )
 
@@ -174,16 +174,11 @@ def organizer_payments(request):
         qs = qs.filter(order__ticket_type__event_id=event_id)
 
     data = []
+
     for p in qs:
         order = p.order
-        ticket_type = order.ticket_type
-        event = ticket_type.event
 
-        # 🔥 REAL payout status logic
-        if order.is_withdrawn:
-            payout_status = "paid"
-        else:
-            payout_status = "unpaid"
+        payout_status = "paid" if order.is_withdrawn else "unpaid"
 
         data.append({
             "id": p.id,
@@ -196,15 +191,15 @@ def organizer_payments(request):
             "quantity": order.quantity,
             "customer_email": order.user.email if order.user else None,
 
-            "ticket_type_name": ticket_type.name,
-            "event_id": event.id,
-            "event_title": event.title,
+            "ticket_type_name": order.ticket_type.name,
+            "event_id": order.ticket_type.event.id,
+            "event_title": order.ticket_type.event.title,
 
             "amount": float(order.total_amount),
             "commission": float(order.commission_amount),
             "organizer_amount": float(order.organizer_amount),
 
-            "payout_status": payout_status,  # 🔥 dynamic now
+            "payout_status": payout_status,
         })
 
-    return Response(data, status=status.HTTP_200_OK)
+    return Response(data)
