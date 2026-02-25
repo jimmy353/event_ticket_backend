@@ -7,6 +7,11 @@ class Event(models.Model):
         ("music", "Music"),
         ("sports", "Sports"),
         ("nightlife", "Nightlife"),
+        ("comedy", "Comedy"),
+        ("liveband", "Lifeband"),
+        ("culture", "Culture"),
+        ("conference", "Conference"),
+        ("other", "Other"),
     ]
 
     title = models.CharField(max_length=255)
