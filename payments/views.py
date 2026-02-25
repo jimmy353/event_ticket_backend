@@ -179,6 +179,12 @@ def organizer_payments(request):
         ticket_type = order.ticket_type
         event = ticket_type.event
 
+        # 🔥 REAL payout status logic
+        if order.is_withdrawn:
+            payout_status = "paid"
+        else:
+            payout_status = "unpaid"
+
         data.append({
             "id": p.id,
             "provider": p.provider,
@@ -194,13 +200,11 @@ def organizer_payments(request):
             "event_id": event.id,
             "event_title": event.title,
 
-            # ✅ IMPORTANT: Use breakdown from ORDER (your model already stores it)
             "amount": float(order.total_amount),
             "commission": float(order.commission_amount),
             "organizer_amount": float(order.organizer_amount),
 
-            # placeholder until you wire real payouts
-            "payout_status": "unpaid",
+            "payout_status": payout_status,  # 🔥 dynamic now
         })
 
     return Response(data, status=status.HTTP_200_OK)
