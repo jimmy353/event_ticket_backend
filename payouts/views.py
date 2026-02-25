@@ -115,22 +115,14 @@ def approve_payout(request, reference):
         )
 
     # 1️⃣ Mark payout paid
-    payout.mark_paid()
+    payout.status = "paid"
+    payout.paid_at = timezone.now()
+    payout.save(update_fields=["status", "paid_at"])
 
-    # 2️⃣ Mark ONLY attached orders withdrawn
-    payout.orders.update(is_withdrawn=True)
-
-    # 3️⃣ (Optional safety) unlock wallet if using locked_balance
-    from wallets.models import OrganizerWallet
-
-    wallet = OrganizerWallet.objects.filter(
-        organizer=payout.organizer
-    ).first()
-
-    if wallet:
-        wallet.locked_balance -= payout.amount
-        wallet.available_balance += payout.amount
-        wallet.save(update_fields=["locked_balance", "available_balance"])
+    # 2️⃣ Mark ONLY linked orders as withdrawn
+    for order in payout.orders.all():
+        order.is_withdrawn = True
+        order.save(update_fields=["is_withdrawn"])
 
     return Response({
         "message": "Payout approved successfully.",
