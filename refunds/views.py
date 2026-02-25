@@ -17,9 +17,12 @@ from .models import Refund
 # =====================================================
 def _refund_allowed(order):
     event_start = order.ticket_type.event.start_date
+    now = timezone.now()
 
-    if event_start - timezone.now() <= timedelta(hours=24):
-        return False, "Refund is only accepted until 24 hours before the event."
+    cutoff_time = event_start - timedelta(hours=24)
+
+    if now >= cutoff_time:
+        return False, "Refund not allowed within 24 hours of the event."
 
     return True, None
 
