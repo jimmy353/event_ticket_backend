@@ -84,9 +84,12 @@ def my_orders(request):
         "quantity": o.quantity,
         "total_amount": float(o.total_amount),
         "created_at": o.created_at,
+
+        # 🔥 REQUIRED FOR REFUND SYSTEM
         "ticket_type_name": o.ticket_type.name,
         "event_title": o.ticket_type.event.title,
         "event_id": o.ticket_type.event.id,
+        "event_start_date": o.ticket_type.event.start_date,  # ✅ ADD THIS
     } for o in orders]
 
     return Response(data)
