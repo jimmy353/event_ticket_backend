@@ -41,12 +41,16 @@ def request_payout(request):
         )
 
     try:
-        event = Event.objects.get(id=event_id, organizer=user)
+    event = Event.objects.get(id=event_id, organizer=user)
     except Event.DoesNotExist:
-        return Response(
-            {"error": "Event not found."},
-            status=status.HTTP_404_NOT_FOUND
-        )
+    return Response({"error": "Event not found."}, status=404)
+
+    # 🔥 NEW RULE
+    if event.end_date > timezone.now():
+    return Response(
+        {"error": "Withdrawal allowed only after event ends."},
+        status=400
+    )
 
     # Prevent duplicate pending payout
     if Payout.objects.filter(
