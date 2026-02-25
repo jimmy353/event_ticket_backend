@@ -63,31 +63,28 @@ def request_payout(request):
     orders = Order.objects.filter(
     ticket_type__event=event,
     status="paid",
-    is_withdrawn=False   # 🔥 Only unpaid earnings
+    is_withdrawn=False
     )
 
     if not orders.exists():
-        return Response(
-            {"error": "No earnings available."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    return Response(
+        {"error": "No earnings available."},
+        status=status.HTTP_400_BAD_REQUEST
+    )
 
     total = orders.aggregate(
-        total=Sum("organizer_amount")
+    total=Sum("organizer_amount")
     )["total"] or 0
 
-    if total <= 0:
-        return Response(
-            {"error": "No earnings available."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
     payout = Payout.objects.create(
-        organizer=user,
-        event=event,
-        amount=total,
-        note=f"Payout request for {event.title}"
+    organizer=user,
+    event=event,
+    amount=total,
+    note=f"Payout request for {event.title}"
     )
+
+    # 🔥 Attach exact orders to payout
+        payout.orders.set(orders)
 
     return Response({
         "message": "Withdrawal request submitted successfully.",
@@ -112,10 +109,15 @@ def approve_payout(request, reference):
         )
 
     if payout.status != "pending":
-        return Response(
-            {"error": "Payout already processed."},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    return Response(
+        {"error": "Payout already processed."},
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+    payout.mark_paid()
+
+    # 🔥 Only mark attached orders withdrawn
+    payout.orders.update(is_withdrawn=True)
 
     # Mark related orders as withdrawn
     Order.objects.filter(

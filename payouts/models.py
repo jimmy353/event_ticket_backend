@@ -46,6 +46,13 @@ class Payout(models.Model):
         blank=True,
     )
 
+    # 🔥 LINKED ORDERS (CRITICAL FOR FINANCE SAFETY)
+    orders = models.ManyToManyField(
+        "orders.Order",
+        related_name="linked_payouts",
+        blank=True
+    )
+
     # ===============================
     # FINANCIAL DATA
     # ===============================
