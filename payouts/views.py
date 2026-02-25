@@ -25,7 +25,7 @@ class MyPayoutsAPIView(generics.ListAPIView):
 
 
 # =====================================================
-# 2️⃣ REQUEST WITHDRAWAL (SECURE VERSION)
+# 2️⃣ REQUEST WITHDRAWAL
 # =====================================================
 
 @api_view(["POST"])
@@ -40,17 +40,21 @@ def request_payout(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # ✅ FIXED INDENTATION HERE
     try:
-    event = Event.objects.get(id=event_id, organizer=user)
+        event = Event.objects.get(id=event_id, organizer=user)
     except Event.DoesNotExist:
-    return Response({"error": "Event not found."}, status=404)
+        return Response(
+            {"error": "Event not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
-    # 🔥 NEW RULE
-    if event.end_date > timezone.now():
-    return Response(
-        {"error": "Withdrawal allowed only after event ends."},
-        status=400
-    )
+    # 🔥 BLOCK WITHDRAWAL IF EVENT NOT ENDED
+    if event.end_date and event.end_date > timezone.now():
+        return Response(
+            {"error": "Withdrawal allowed only after event ends."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     # Prevent duplicate pending payout
     if Payout.objects.filter(
@@ -63,7 +67,7 @@ def request_payout(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Get PAID orders only
+    # Get PAID and NOT withdrawn orders
     orders = Order.objects.filter(
         ticket_type__event=event,
         status="paid",
@@ -87,18 +91,18 @@ def request_payout(request):
         note=f"Payout request for {event.title}"
     )
 
-    # Attach exact orders to payout
+    # 🔥 Attach orders to payout
     payout.orders.set(orders)
 
     return Response({
         "message": "Withdrawal request submitted successfully.",
         "total": float(total),
-        "reference": payout.reference,
+        "reference": payout.reference
     })
 
 
 # =====================================================
-# 3️⃣ ADMIN APPROVE PAYOUT (USING REFERENCE)
+# 3️⃣ ADMIN APPROVE PAYOUT
 # =====================================================
 
 @api_view(["POST"])
@@ -118,15 +122,7 @@ def approve_payout(request, reference):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # 1️⃣ Mark payout paid
-    payout.status = "paid"
-    payout.paid_at = timezone.now()
-    payout.save(update_fields=["status", "paid_at"])
-
-    # 2️⃣ Mark ONLY linked orders as withdrawn
-    for order in payout.orders.all():
-        order.is_withdrawn = True
-        order.save(update_fields=["is_withdrawn"])
+    payout.mark_paid()
 
     return Response({
         "message": "Payout approved successfully.",
