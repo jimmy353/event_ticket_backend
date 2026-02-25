@@ -46,7 +46,7 @@ class Payout(models.Model):
         blank=True,
     )
 
-    # 🔥 LINKED ORDERS (CRITICAL FOR FINANCE SAFETY)
+    # 🔥 LINKED ORDERS
     orders = models.ManyToManyField(
         "orders.Order",
         related_name="linked_payouts",
@@ -112,10 +112,29 @@ class Payout(models.Model):
         self.failure_reason = reason
         self.save(update_fields=["status", "failure_reason"])
 
+    # ===============================
+    # OVERRIDE SAVE (CRITICAL FIX)
+    # ===============================
     def save(self, *args, **kwargs):
+        is_new_paid = False
+
+        # Detect status change to "paid"
+        if self.pk:
+            old = Payout.objects.get(pk=self.pk)
+            if old.status != "paid" and self.status == "paid":
+                is_new_paid = True
+
+        # Generate reference if missing
         if not self.reference:
             self.reference = generate_payout_reference()
+
         super().save(*args, **kwargs)
+
+        # 🔥 If payout just became paid → mark linked orders withdrawn
+        if is_new_paid:
+            for order in self.orders.all():
+                order.is_withdrawn = True
+                order.save(update_fields=["is_withdrawn"])
 
     def __str__(self):
         return f"{self.reference} - {self.organizer.email} - {self.amount}"
