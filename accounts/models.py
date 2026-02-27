@@ -114,3 +114,41 @@ class OrganizerRequest(models.Model):
 
     def __str__(self):
         return f"{self.user.email} - {self.status}"
+
+
+class OrganizerSettings(models.Model):
+
+    PAYOUT_PROVIDERS = (
+        ("momo", "MTN MoMo"),
+        ("mgurush", "M-Gurush"),
+    )
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="organizer_settings"
+    )
+
+    # Business Info
+    business_name = models.CharField(max_length=255, blank=True)
+    business_phone = models.CharField(max_length=30, blank=True)
+    description = models.TextField(blank=True)
+
+    logo = models.ImageField(upload_to="organizers/logos/", blank=True, null=True)
+    banner = models.ImageField(upload_to="organizers/banners/", blank=True, null=True)
+
+    # Payout Settings
+    payout_provider = models.CharField(
+        max_length=20,
+        choices=PAYOUT_PROVIDERS,
+        default="momo"
+    )
+
+    payout_phone = models.CharField(max_length=30, blank=True)
+
+    auto_payout = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.email} Organizer Settings"

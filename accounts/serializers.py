@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 
-from .models import OrganizerRequest, EmailOTP
+from .models import OrganizerRequest, EmailOTP, OrganizerSettings
 
 User = get_user_model()
 
@@ -200,3 +200,55 @@ class OrganizerRequestSerializer(serializers.ModelSerializer):
             "id_document",
             "status",
         ]
+
+
+# ==========================
+# ORGANIZER SETTINGS
+# ==========================
+class OrganizerSettingsSerializer(serializers.ModelSerializer):
+
+    logo = serializers.ImageField(required=False)
+    banner = serializers.ImageField(required=False)
+
+    class Meta:
+        model = OrganizerSettings
+        fields = [
+            "business_name",
+            "business_phone",
+            "description",
+            "logo",
+            "banner",
+            "payout_provider",
+            "payout_phone",
+            "auto_payout",
+        ]
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+
+        if not user.is_organizer:
+            raise serializers.ValidationError("Only organizers can update settings.")
+
+        return attrs
+
+    def create(self, validated_data):
+        user = self.context["request"].user
+
+        settings, created = OrganizerSettings.objects.get_or_create(
+            user=user,
+            defaults=validated_data
+        )
+
+        if not created:
+            for attr, value in validated_data.items():
+                setattr(settings, attr, value)
+            settings.save()
+
+        return settings
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance

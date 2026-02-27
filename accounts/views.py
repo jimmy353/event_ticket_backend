@@ -19,8 +19,9 @@ from .serializers import (
     ResendOTPSerializer,
     ForgotPasswordSerializer,
     ResetPasswordSerializer,
+    OrganizerSettingsSerializer,
 )
-from .models import OrganizerRequest, EmailOTP
+from .models import OrganizerRequest, EmailOTP, OrganizerSettings
 
 User = get_user_model()
 
@@ -443,3 +444,60 @@ class TestEmailView(APIView):
             return Response({"ok": False, "error": err}, status=status.HTTP_200_OK)
 
         return Response({"ok": True, "message": "Test email sent ✅"}, status=status.HTTP_200_OK)
+
+
+
+
+# ==========================================
+# ORGANIZER SETTINGS (DASHBOARD)
+# ==========================================
+class OrganizerSettingsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+
+        if not request.user.is_organizer:
+            return Response(
+                {"error": "Only organizers can access settings"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        settings_obj, created = OrganizerSettings.objects.get_or_create(
+            user=request.user
+        )
+
+        serializer = OrganizerSettingsSerializer(
+            settings_obj,
+            context={"request": request}
+        )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def patch(self, request):
+
+        if not request.user.is_organizer:
+            return Response(
+                {"error": "Only organizers can update settings"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        settings_obj, created = OrganizerSettings.objects.get_or_create(
+            user=request.user
+        )
+
+        serializer = OrganizerSettingsSerializer(
+            settings_obj,
+            data=request.data,
+            partial=True,
+            context={"request": request}
+        )
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save()
+
+        return Response(
+            {"message": "Settings updated successfully"},
+            status=status.HTTP_200_OK
+        )
