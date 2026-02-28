@@ -65,3 +65,20 @@ def credit_wallets_after_success_payment(sender, instance, created, **kwargs):
             amount=organizer_amount,
             status="pending"
         )
+
+
+@receiver(post_save, sender=Payout)
+def mark_order_withdrawn_when_payout_paid(sender, instance, created, **kwargs):
+    """
+    When payout becomes PAID:
+    - Mark related order as withdrawn
+    """
+
+    if instance.status != "paid":
+        return
+
+    order = instance.order
+
+    if not order.is_withdrawn:
+        order.is_withdrawn = True
+        order.save(update_fields=["is_withdrawn"])

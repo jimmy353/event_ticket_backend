@@ -1,0 +1,104 @@
+[33m9295db7[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Improved refund model with automatic order sync
+[33mdf3a623[m Fixed AUTH_USER_MODEL loading, cleaned organizer app, and resolved URL configuration
+[33mbb88bf7[m Fixed AUTH_USER_MODEL loading, cleaned organizer app, and resolved URL configuration
+[33m942972d[m Add organizer settings system (model, serializer, view, endpoint)
+[33m1d42548[m Auto sync Order status when Refund is paid
+[33mcef88f1[m Add event_start_date to my_orders API for refund logic
+[33m0d27c2f[m Add comedy category support
+[33mc63ed91[m Add comedy category support
+[33m850c0a6[m Fix production 500 error - full refund system stable version
+[33mef967f2[m Add refunds endpoints (request + organizer list + admin approve)
+[33m879b9e7[m Add order FK to Ticket for safe refunds
+[33m6ea020e[m Fix refunds views indentation + approve refund endpoint
+[33m32d5de7[m Fix indentation error in payouts views
+[33mf0ca375[m Block payout request until event ends
+[33m10fb514[m Auto mark orders withdrawn when payout becomes paid
+[33mabfe6d9[m Fix approve payout to mark orders withdrawn correctly
+[33mb113551[m Fix payout status logic using order.is_withdrawn
+[33m4253c3d[m Fix payout status logic using order.is_withdrawn
+[33md4d0043[m Fix payout status logic using order.is_withdrawn
+[33m110a9e7[m Upgrade payout system to order-linked finance safety
+[33m5e50835[m Upgrade payout system to order-linked finance safety
+[33m6c3f591[m Lock finance system - prevent double withdrawals
+[33mfd0dd82[m Add payout reference system and secure payout approval flow
+[33m8098aef[m Fix payouts migration and sync DB schema
+[33m305c411[m update payouts
+[33m4bea60b[m Include payouts URLs in project routing
+[33m627d6bc[m Fix payouts event ForeignKey syntax and migration issue
+[33m639c948[m Fix Order model indentation, payments API, and admin 500 error
+[33m7a4c66e[m Fix organizer payments API: event filter + finance fields
+[33m44b19cd[m Finance system update
+[33m95c6c74[m Fix login authentication with email
+[33m5989df5[m Fix login 500 error
+[33m917d692[m customer login, organizer only
+[33mefe4071[m Remove customer login, organizer only
+[33m70aa7e5[m Remove customer login, organizer only
+[33m28ec19c[m Fix organizer login request lookup
+[33mb6b6638[m Fix organizer login request lookup
+[33m2e038cc[m Fix organizer login request lookup
+[33mbea4d95[m Fix organizer login request lookup
+[33m68dfa38[m Fix organizer login request lookup
+[33me0afe8f[m Fix organizer approval login logic and status handling
+[33md2894c6[m Fix settings production config
+[33m8c6fead[m Fix 500 error - remove created_at ordering
+[33m0c4678c[m Production CORS + Allowed hosts fix
+[33mf357b62[m Enable CORS for dashboard domain
+[33m4037d38[m Ensure organizer route deployed
+[33m43fe7c4[m add events
+[33me62f1ad[m add events
+[33m6ee7c54[m Fix refund endpoints, restore organizer approve refund, and finalize advanced analytics
+[33mfccf786[m Fix refund endpoints, restore organizer approve refund, and finalize advanced analytics
+[33ma30d2b1[m Fix analytics import issue and update orders endpoints
+[33mec2122c[m Complete orders system: refunds, organizer security, analytics dashboard, commission separation
+[33m6ff4a26[m Fix login-role endpoint routing
+[33m6139cfb[m Fix login-role endpoint routing
+[33m72f3075[m Fix OTP email using SendGrid API
+[33m6d5db68[m Fix OTP email using SendGrid API
+[33meca1082[m Fix OTP email using SendGrid API
+[33m500342b[m Fix OTP email using SendGrid API
+[33m8f5d9ab[m Fix OTP email using SendGrid API
+[33m5db0b90[m Fix OTP email using SendGrid API
+[33md7f42e4[m Fix accounts views OTP + forgot password
+[33m4a497ba[m Fix accounts views OTP + forgot password
+[33m157657b[m Fix accounts views OTP + forgot password
+[33m24d9343[m Fix SendGrid test email endpoint
+[33mf735853[m Use SendGrid API instead of SMTP
+[33m321f289[m Fix test email endpoint return JSON error
+[33mb636c24[m Fix test email endpoint return JSON error
+[33m3f33aed[m Fix test email endpoint return JSON error
+[33m0f144d4[m Use SendGrid SMTP for OTP emails
+[33m1b3ca5f[m Fix SMTP settings for Render (TLS 587)
+[33m4f3133e[m Show SMTP error in test email endpoint
+[33m7f8bac6[m Add test email endpoint for OTP debugging
+[33mf29e5ee[m Add test email endpoint for OTP debugging
+[33m9a6b864[m Add account
+[33m0f19e62[m Add Email SMTP
+[33m6f63c70[m Connect MoMo payments to Orders system
+[33m4ccb011[m Fix missing python-dotenv on Render
+[33me8ab22e[m Add MTN MoMo sandbox integration (Collections API)
+[33m56e561d[m Fix payments organizer endpoint
+[33m68478de[m Add update and delete ticket type endpoints
+[33m20b9db4[m Update tickets endpoints
+[33m293a7fa[m Add update/delete event endpoint
+[33mf13a147[m Switch psycopg2 to psycopg for Python 3.14
+[33m1b648df[m Add psycopg2-binary for Postgres
+[33m10a9141[m Fix database to use Render Postgres
+[33m41ab579[m Fix cloudinary image urls properly
+[33meacdb7c[m Fix cloudinary image urls
+[33m15d63a5[m Fix event image url return cloudinary url
+[33m617c867[m Fix cloudinary urls to https permanently
+[33m5ea044f[m Force cloudinary images to jpg for mobile
+[33m80644f6[m Fix cloudinary image urls permanently
+[33mb7ee43f[m Fix cloudinary image urls
+[33mc4574e2[m Fix serializer method field
+[33m21f01ac[m Fix image url https
+[33m48d2198[m Fix API root routes
+[33mbce709f[m Fix SECRET_KEY env setup
+[33m768fa73[m Fix allowed hosts for Render domain
+[33m93cb4a2[m Fix allowed hosts for Render
+[33m7c0ab54[m Add homepage route
+[33med68004[m Add whitenoise and gunicorn
+[33mc3dd840[m Add whitenoise
+[33m13669bc[m Add render.yaml
+[33md46c109[m Add requirements.txt
+[33md84031d[m Initial commit
