@@ -14,7 +14,8 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)
     password2 = serializers.CharField(write_only=True, required=True)
 
-    role = serializers.CharField(write_only=True, required=True)
+    # 🔥 UPDATED: role now optional (default customer)
+    role = serializers.CharField(write_only=True, required=False, default="customer")
 
     # organizer extra fields
     company_name = serializers.CharField(write_only=True, required=False)
@@ -42,7 +43,9 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         validate_password(attrs["password"])
 
-        role = attrs.get("role")
+        # 🔥 UPDATED: default role if missing
+        role = attrs.get("role", "customer")
+
         if role not in ["customer", "organizer"]:
             raise serializers.ValidationError({"role": "Role must be customer or organizer"})
 
@@ -60,7 +63,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data.pop("password2")
         password = validated_data.pop("password")
 
-        role = validated_data.pop("role")
+        # 🔥 UPDATED: default role if missing
+        role = validated_data.pop("role", "customer")
 
         company_name = validated_data.pop("company_name", None)
         momo_number = validated_data.pop("momo_number", None)
