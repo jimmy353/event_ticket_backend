@@ -90,7 +90,7 @@ def send_otp_email(email: str, otp_code: str, purpose: str = "verify") -> tuple[
 
 
 # ==========================================
-# REGISTER (CREATE USER + SEND OTP)
+# REGISTER (EMAIL + PASSWORD ONLY)
 # ==========================================
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -102,24 +102,25 @@ class RegisterView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.save()
-        role = request.data.get("role", "customer")
 
-        # Delete any old unused OTPs
-        EmailOTP.objects.filter(email=user.email, purpose="verify", is_used=False).delete()
+        # Create OTP
+        EmailOTP.objects.filter(
+            email=user.email,
+            purpose="verify",
+            is_used=False
+        ).delete()
 
-        # Create new OTP
-        otp_obj = EmailOTP.objects.create(email=user.email, purpose="verify")
+        otp_obj = EmailOTP.objects.create(
+            email=user.email,
+            purpose="verify"
+        )
 
-        # Send OTP
         ok, err = send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
 
         if not ok:
-            # Return message to app, but user still created
             return Response(
                 {
                     "message": "Account created but failed to send OTP email.",
-                    "email": user.email,
-                    "role": role,
                     "email_error": err,
                 },
                 status=status.HTTP_201_CREATED,
@@ -127,9 +128,8 @@ class RegisterView(APIView):
 
         return Response(
             {
-                "message": "Account created. OTP sent to your email. Please verify to continue.",
+                "message": "Account created. OTP sent to your email.",
                 "email": user.email,
-                "role": role,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -205,25 +205,18 @@ class ResendOTPView(APIView):
 
 
 # ==========================================
-# LOGIN WITH ROLE (FIXED CLEAN VERSION)
+# LOGIN (EMAIL + PASSWORD ONLY)
 # ==========================================
-class LoginWithRoleView(APIView):
+class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
         email = request.data.get("email")
         password = request.data.get("password")
-        role = request.data.get("role")
 
         if not email or not password:
             return Response(
                 {"detail": "Email and password are required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if role not in ["customer", "organizer"]:
-            return Response(
-                {"detail": "Invalid role"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -241,6 +234,18 @@ class LoginWithRoleView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        refresh = RefreshToken.for_user(user)
+
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+        
         # ==========================
         # ORGANIZER LOGIN
         # ==========================

@@ -8,98 +8,48 @@ User = get_user_model()
 
 
 # ==========================
-# REGISTER + SEND OTP
+# REGISTER (EMAIL + PASSWORD ONLY)
 # ==========================
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True)
-    password2 = serializers.CharField(write_only=True, required=True)
-
-    # 🔥 UPDATED: role now optional (default customer)
-    role = serializers.CharField(write_only=True, required=False, default="customer")
-
-    # organizer extra fields
-    company_name = serializers.CharField(write_only=True, required=False)
-    momo_number = serializers.CharField(write_only=True, required=False)
-    id_document = serializers.FileField(write_only=True, required=False)
 
     class Meta:
         model = User
         fields = [
             "id",
             "email",
-            "full_name",
-            "phone",
             "password",
-            "password2",
-            "role",
-            "company_name",
-            "momo_number",
-            "id_document",
         ]
 
     def validate(self, attrs):
-        if attrs["password"] != attrs["password2"]:
-            raise serializers.ValidationError({"password": "Passwords do not match"})
-
         validate_password(attrs["password"])
-
-        # 🔥 UPDATED: default role if missing
-        role = attrs.get("role", "customer")
-
-        if role not in ["customer", "organizer"]:
-            raise serializers.ValidationError({"role": "Role must be customer or organizer"})
-
-        if role == "organizer":
-            if not attrs.get("company_name"):
-                raise serializers.ValidationError({"company_name": "Company name is required"})
-            if not attrs.get("momo_number"):
-                raise serializers.ValidationError({"momo_number": "MoMo number is required"})
-            if not attrs.get("id_document"):
-                raise serializers.ValidationError({"id_document": "ID document is required"})
-
         return attrs
 
     def create(self, validated_data):
-        validated_data.pop("password2")
         password = validated_data.pop("password")
-
-        # 🔥 UPDATED: default role if missing
-        role = validated_data.pop("role", "customer")
-
-        company_name = validated_data.pop("company_name", None)
-        momo_number = validated_data.pop("momo_number", None)
-        id_document = validated_data.pop("id_document", None)
-
         email = validated_data.get("email")
 
-        user = User(**validated_data)
+        user = User(email=email)
         user.set_password(password)
 
-        # default customer
+        # Default flags
         user.is_customer = True
         user.is_organizer = False
+        user.is_verified = False
 
-        # organizer signup: disable organizer until approved
-        if role == "organizer":
-            user.is_customer = False
-            user.is_organizer = False
-
-        user.is_verified = False  # ✅ must verify email first
         user.save()
 
-        # create organizer request
-        if role == "organizer":
-            OrganizerRequest.objects.create(
-                user=user,
-                company_name=company_name,
-                momo_number=momo_number,
-                id_document=id_document,
-                status="pending"
-            )
+        # Create OTP for verification
+        EmailOTP.objects.filter(
+            email=email,
+            purpose="verify",
+            is_used=False
+        ).delete()
 
-        # ✅ Create OTP for verification
-        EmailOTP.objects.filter(email=email, purpose="verify", is_used=False).delete()
-        EmailOTP.objects.create(email=email, purpose="verify")
+        EmailOTP.objects.create(
+            email=email,
+            purpose="verify"
+        )
 
         return user
 
@@ -116,7 +66,12 @@ class VerifyOTPSerializer(serializers.Serializer):
         otp = attrs.get("otp")
 
         try:
-            otp_obj = EmailOTP.objects.get(email=email, otp_code=otp, purpose="verify", is_used=False)
+            otp_obj = EmailOTP.objects.get(
+                email=email,
+                otp_code=otp,
+                purpose="verify",
+                is_used=False
+            )
         except EmailOTP.DoesNotExist:
             raise serializers.ValidationError({"otp": "Invalid OTP"})
 
@@ -167,7 +122,12 @@ class ResetPasswordSerializer(serializers.Serializer):
         validate_password(new_password)
 
         try:
-            otp_obj = EmailOTP.objects.get(email=email, otp_code=otp, purpose="reset", is_used=False)
+            otp_obj = EmailOTP.objects.get(
+                email=email,
+                otp_code=otp,
+                purpose="reset",
+                is_used=False
+            )
         except EmailOTP.DoesNotExist:
             raise serializers.ValidationError({"otp": "Invalid OTP"})
 
@@ -187,14 +147,15 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "email",
-            "full_name",
-            "phone",
             "is_customer",
             "is_organizer",
             "is_verified",
         ]
 
 
+# ==========================
+# ORGANIZER REQUEST (WEB DASHBOARD)
+# ==========================
 class OrganizerRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrganizerRequest
@@ -207,7 +168,7 @@ class OrganizerRequestSerializer(serializers.ModelSerializer):
 
 
 # ==========================
-# ORGANIZER SETTINGS
+# ORGANIZER SETTINGS (WEB DASHBOARD)
 # ==========================
 class OrganizerSettingsSerializer(serializers.ModelSerializer):
 
