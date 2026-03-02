@@ -1,10 +1,10 @@
+# config/urls.py
+
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from django.conf import settings
 from django.conf.urls.static import static
-from django.http import JsonResponse
-
-from accounts.jwt_views import CustomTokenObtainPairView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 
@@ -13,20 +13,20 @@ def api_home(request):
 
 
 urlpatterns = [
-    # API root (returns JSON, not HTML)
+    # API root
     path("", api_home),
     path("api/", api_home),
 
+    # Admin
     path("admin/", admin.site.urls),
 
-    # JWT LOGIN + REFRESH
-    path("api/auth/login/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-
-    # accounts routes
+    # AUTH ROUTES (accounts handles register + login)
     path("api/auth/", include("accounts.urls")),
 
-    # app routes
+    # JWT refresh (keep this)
+    path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+
+    # App routes
     path("api/events/", include("events.urls")),
     path("api/tickets/", include("tickets.urls")),
     path("api/orders/", include("orders.urls")),
@@ -34,9 +34,7 @@ urlpatterns = [
     path("api/payouts/", include("payouts.urls")),
     path("api/organizer/", include("organizer.urls")),
     path("api/refunds/", include("refunds.urls")),
-    
 ]
 
-# serve media files only in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

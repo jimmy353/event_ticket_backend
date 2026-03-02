@@ -30,9 +30,6 @@ User = get_user_model()
 # SEND EMAIL (SENDGRID WEB API)
 # ==========================================
 def send_email_sendgrid(to_email: str, subject: str, text_content: str) -> tuple[bool, str]:
-    """
-    Returns: (success: bool, error_message: str)
-    """
     api_key = getattr(settings, "SENDGRID_API_KEY", None)
 
     if not api_key:
@@ -51,9 +48,9 @@ def send_email_sendgrid(to_email: str, subject: str, text_content: str) -> tuple
         sg = SendGridAPIClient(api_key)
         resp = sg.send(message)
 
-        # SendGrid success: 202 Accepted
         if resp.status_code in (200, 201, 202):
             return True, ""
+
         return False, f"SendGrid returned status_code={resp.status_code}"
 
     except Exception as e:
@@ -72,7 +69,6 @@ def build_otp_message(otp_code: str, purpose: str) -> tuple[str, str]:
         )
         return subject, text
 
-    # reset
     subject = "Reset your Sirheart Events password"
     text = (
         "Hello,\n\n"
@@ -90,7 +86,7 @@ def send_otp_email(email: str, otp_code: str, purpose: str = "verify") -> tuple[
 
 
 # ==========================================
-# REGISTER (EMAIL + PASSWORD ONLY)
+# REGISTER
 # ==========================================
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -103,7 +99,6 @@ class RegisterView(APIView):
 
         user = serializer.save()
 
-        # Create OTP
         EmailOTP.objects.filter(
             email=user.email,
             purpose="verify",
@@ -115,16 +110,7 @@ class RegisterView(APIView):
             purpose="verify"
         )
 
-        ok, err = send_otp_email(user.email, otp_obj.otp_code, purpose="verify")
-
-        if not ok:
-            return Response(
-                {
-                    "message": "Account created but failed to send OTP email.",
-                    "email_error": err,
-                },
-                status=status.HTTP_201_CREATED,
-            )
+        ok, err = send_otp_email(user.email, otp_obj.otp_code)
 
         return Response(
             {
@@ -150,10 +136,7 @@ class VerifyOTPView(APIView):
         otp_obj = serializer.validated_data["otp_obj"]
         email = serializer.validated_data["email"]
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        user = User.objects.get(email=email)
 
         user.is_verified = True
         user.save(update_fields=["is_verified"])
@@ -162,12 +145,13 @@ class VerifyOTPView(APIView):
         otp_obj.save(update_fields=["is_used"])
 
         return Response(
-            {"message": "Email verified successfully. You can now login.", "email": user.email},
+            {"message": "Email verified successfully. You can now login."},
             status=status.HTTP_200_OK,
         )
 
 
-# ==========================================
+
+        # ==========================================
 # RESEND OTP
 # ==========================================
 class ResendOTPView(APIView):
@@ -184,28 +168,38 @@ class ResendOTPView(APIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        if user.is_verified:
-            return Response({"message": "Account already verified"}, status=status.HTTP_200_OK)
-
-        # Delete old OTPs then create new
-        EmailOTP.objects.filter(email=email, purpose="verify", is_used=False).delete()
-        otp_obj = EmailOTP.objects.create(email=email, purpose="verify")
-
-        ok, err = send_otp_email(email, otp_obj.otp_code, purpose="verify")
-
-        if not ok:
             return Response(
-                {"message": "Failed to resend OTP", "email_error": err},
-                status=status.HTTP_200_OK,
+                {"error": "User not found"},
+                status=status.HTTP_404_NOT_FOUND
             )
 
-        return Response({"message": "New OTP sent to your email"}, status=status.HTTP_200_OK)
+        if user.is_verified:
+            return Response(
+                {"message": "Account already verified"},
+                status=status.HTTP_200_OK
+            )
+
+        EmailOTP.objects.filter(
+            email=email,
+            purpose="verify",
+            is_used=False
+        ).delete()
+
+        otp_obj = EmailOTP.objects.create(
+            email=email,
+            purpose="verify"
+        )
+
+        send_otp_email(email, otp_obj.otp_code)
+
+        return Response(
+            {"message": "New OTP sent"},
+            status=status.HTTP_200_OK
+        )
 
 
 # ==========================================
-# LOGIN (EMAIL + PASSWORD ONLY)
+# LOGIN
 # ==========================================
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -245,131 +239,6 @@ class LoginView(APIView):
         )
 
 
-        
-        # ==========================
-        # ORGANIZER LOGIN
-        # ==========================
-        if role == "organizer":
-
-            req = (
-                OrganizerRequest.objects
-                .filter(user=user)
-                .order_by("-created_at")
-                .first()
-            )
-
-            if not req:
-                return Response(
-                    {"status": "not_requested"},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            if req.status == "pending":
-                return Response(
-                    {"status": "pending"},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            if req.status == "rejected":
-                return Response(
-                    {"status": "rejected"},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-            # Approved
-            if not user.is_organizer:
-                user.is_organizer = True
-                user.save(update_fields=["is_organizer"])
-
-            refresh = RefreshToken.for_user(user)
-
-            return Response(
-                {
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
-                    "role": "organizer",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        # ==========================
-        # CUSTOMER LOGIN
-        # ==========================
-        if role == "customer":
-
-            refresh = RefreshToken.for_user(user)
-
-            return Response(
-                {
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
-                    "role": "customer",
-                },
-                status=status.HTTP_200_OK,
-            )
-
-
-
-# =============================
-# FORGOT PASSWORD
-# =============================
-class ForgotPasswordView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        serializer = ForgotPasswordSerializer(data=request.data)
-
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=400)
-
-        email = serializer.validated_data["email"]
-
-        EmailOTP.objects.filter(
-            email=email,
-            purpose="reset",
-            is_used=False
-        ).delete()
-
-        otp = EmailOTP.objects.create(email=email, purpose="reset")
-
-        send_email_sendgrid(
-            email,
-            "Reset Password",
-            f"Your reset OTP is {otp.otp_code}"
-        )
-
-        return Response({"message": "Reset OTP sent"})
-
-
-# ==========================================
-# RESET PASSWORD (VERIFY OTP + SET NEW PASSWORD)
-# ==========================================
-class ResetPasswordView(APIView):
-    permission_classes = [AllowAny]
-
-    def post(self, request):
-        serializer = ResetPasswordSerializer(data=request.data)
-
-        if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        email = serializer.validated_data["email"]
-        new_password = serializer.validated_data["new_password"]
-        otp_obj = serializer.validated_data["otp_obj"]
-
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        user.set_password(new_password)
-        user.save()
-
-        otp_obj.is_used = True
-        otp_obj.save(update_fields=["is_used"])
-
-        return Response({"message": "Password reset successful. You can now login."}, status=status.HTTP_200_OK)
-
 
 # ==========================================
 # PROFILE
@@ -382,20 +251,27 @@ class ProfileView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-# ==========================================
-# ORGANIZER REQUEST
+        # ==========================================
+# ORGANIZER REQUEST (WEB DASHBOARD)
 # ==========================================
 class OrganizerRequestView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+
         if request.user.is_organizer:
-            return Response({"error": "You are already an organizer"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "You are already an organizer"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if OrganizerRequest.objects.filter(user=request.user).exists():
             req = OrganizerRequest.objects.get(user=request.user)
             return Response(
-                {"error": "Organizer request already submitted", "status": req.status},
+                {
+                    "error": "Organizer request already submitted",
+                    "status": req.status
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -412,13 +288,20 @@ class OrganizerRequestView(APIView):
             status="pending",
         )
 
-        return Response({"message": "Organizer request submitted successfully"}, status=status.HTTP_201_CREATED)
+        return Response(
+            {"message": "Organizer request submitted successfully"},
+            status=status.HTTP_201_CREATED
+        )
 
     def get(self, request):
+
         try:
             req = OrganizerRequest.objects.get(user=request.user)
         except OrganizerRequest.DoesNotExist:
-            return Response({"status": "not_requested"}, status=status.HTTP_200_OK)
+            return Response(
+                {"status": "not_requested"},
+                status=status.HTTP_200_OK
+            )
 
         return Response(
             {
@@ -431,30 +314,9 @@ class OrganizerRequestView(APIView):
         )
 
 
-# ==========================================
-# OPTIONAL: TEST EMAIL ENDPOINT
-# ==========================================
-class TestEmailView(APIView):
-    permission_classes = [AllowAny]
 
-    def get(self, request):
-        to = request.GET.get("to") or "noreply@sirheartevents.com"
-        ok, err = send_email_sendgrid(
-            to_email=to,
-            subject="Sirheart Test Email",
-            text_content="This is a test email from Sirheart Events backend.",
-        )
-
-        if not ok:
-            return Response({"ok": False, "error": err}, status=status.HTTP_200_OK)
-
-        return Response({"ok": True, "message": "Test email sent ✅"}, status=status.HTTP_200_OK)
-
-
-
-
-# ==========================================
-# ORGANIZER SETTINGS (DASHBOARD)
+        # ==========================================
+# ORGANIZER SETTINGS (WEB DASHBOARD)
 # ==========================================
 class OrganizerSettingsView(APIView):
     permission_classes = [IsAuthenticated]
@@ -506,3 +368,62 @@ class OrganizerSettingsView(APIView):
             {"message": "Settings updated successfully"},
             status=status.HTTP_200_OK
         )
+
+
+
+# ==========================================
+# FORGOT PASSWORD
+# ==========================================
+class ForgotPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ForgotPasswordSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        email = serializer.validated_data["email"]
+
+        EmailOTP.objects.filter(
+            email=email,
+            purpose="reset",
+            is_used=False
+        ).delete()
+
+        otp = EmailOTP.objects.create(email=email, purpose="reset")
+
+        send_email_sendgrid(
+            email,
+            "Reset Password",
+            f"Your reset OTP is {otp.otp_code}"
+        )
+
+        return Response({"message": "Reset OTP sent"})
+
+
+# ==========================================
+# RESET PASSWORD
+# ==========================================
+class ResetPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        email = serializer.validated_data["email"]
+        new_password = serializer.validated_data["new_password"]
+        otp_obj = serializer.validated_data["otp_obj"]
+
+        user = User.objects.get(email=email)
+
+        user.set_password(new_password)
+        user.save()
+
+        otp_obj.is_used = True
+        otp_obj.save(update_fields=["is_used"])
+
+        return Response({"message": "Password reset successful."})
