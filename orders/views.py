@@ -10,6 +10,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from django.conf import settings
+from rest_framework import status
+from .tasks import send_event_reminders
+
 from .models import Order
 from tickets.models import TicketType, Ticket
 from payments.models import Payment
