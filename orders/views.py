@@ -458,7 +458,7 @@ class UpcomingEventsView(APIView):
 # ===== FREE CRON TRIGGER =====
 @api_view(["GET"])
 def trigger_reminders(request):
-    secret = request.GET.get("key")
+    return Response({"working": "yes"})
 
     if secret != settings.CRON_SECRET_KEY:
         return Response(
