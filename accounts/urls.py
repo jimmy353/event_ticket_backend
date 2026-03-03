@@ -10,7 +10,6 @@ from .views import (
     OrganizerRequestView,
     OrganizerSettingsView,
     ChangePasswordView,
-    UpcomingEventsView
 )
 
 urlpatterns = [

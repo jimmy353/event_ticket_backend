@@ -1,4 +1,5 @@
 from django.urls import path
+from rest_framework.views import APIView
 from .views import (
     create_order,
     my_orders,
@@ -8,7 +9,7 @@ from .views import (
     organizer_approve_refund,
     organizer_dashboard_stats,
     organizer_advanced_analytics,
-    UpcomingEventsView
+    UpcomingEventsView,
 )
 
 urlpatterns = [

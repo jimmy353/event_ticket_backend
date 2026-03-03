@@ -14,6 +14,7 @@ from .models import Order
 from tickets.models import TicketType, Ticket
 from payments.models import Payment
 from events.models import Event
+from rest_framework.views import APIView
 
 
 # =====================================
@@ -409,3 +410,39 @@ def organizer_advanced_analytics(request):
         "top_events": top_events_data,
         "predicted_next_month": predicted_next_month
     })
+
+
+
+
+    # ==========================================
+# UPCOMING EVENTS
+# ==========================================
+class UpcomingEventsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        now = timezone.now()
+
+        orders = (
+            Order.objects
+            .filter(
+                user=request.user,
+                status="paid",
+                event__start_date__gt=now
+            )
+            .select_related("event")
+            .order_by("event__start_date")
+        )
+
+        data = []
+
+        for order in orders:
+            data.append({
+                "id": order.id,
+                "event_title": order.event.title,
+                "event_start_date": order.event.start_date,
+                "location": order.event.location,
+                "ticket_type": order.ticket_type.name,
+            })
+
+        return Response(data)
