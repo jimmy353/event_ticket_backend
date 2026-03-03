@@ -7,10 +7,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.contrib.auth import authenticate, get_user_model
 from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-from django.contrib.auth.password_validation import validate_password
 
 from .serializers import (
     RegisterSerializer,
@@ -23,6 +24,9 @@ from .serializers import (
     OrganizerSettingsSerializer,
 )
 from .models import OrganizerRequest, EmailOTP, OrganizerSettings
+
+# ✅ required for UpcomingEventsView (adjust import if your Order model is elsewhere)
+from orders.models import Order
 
 User = get_user_model()
 
@@ -151,8 +155,7 @@ class VerifyOTPView(APIView):
         )
 
 
-
-        # ==========================================
+# ==========================================
 # RESEND OTP
 # ==========================================
 class ResendOTPView(APIView):
@@ -240,7 +243,6 @@ class LoginView(APIView):
         )
 
 
-
 # ==========================================
 # PROFILE
 # ==========================================
@@ -291,9 +293,9 @@ class ProfileView(APIView):
         )
 
 
-
-
-
+# ==========================================
+# CHANGE PASSWORD
+# ==========================================
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -333,7 +335,41 @@ class ChangePasswordView(APIView):
         )
 
 
-        # ==========================================
+# ==========================================
+# UPCOMING EVENTS
+# ==========================================
+class UpcomingEventsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        now = timezone.now()
+
+        orders = (
+            Order.objects
+            .filter(
+                user=request.user,
+                status="paid",
+                event__start_date__gt=now
+            )
+            .select_related("event")
+            .order_by("event__start_date")
+        )
+
+        data = []
+
+        for order in orders:
+            data.append({
+                "id": order.id,
+                "event_title": order.event.title,
+                "event_start_date": order.event.start_date,
+                "location": order.event.location,
+                "ticket_type": order.ticket_type.name,
+            })
+
+        return Response(data)
+
+
+# ==========================================
 # ORGANIZER REQUEST (WEB DASHBOARD)
 # ==========================================
 class OrganizerRequestView(APIView):
@@ -396,8 +432,7 @@ class OrganizerRequestView(APIView):
         )
 
 
-
-        # ==========================================
+# ==========================================
 # ORGANIZER SETTINGS (WEB DASHBOARD)
 # ==========================================
 class OrganizerSettingsView(APIView):
@@ -450,7 +485,6 @@ class OrganizerSettingsView(APIView):
             {"message": "Settings updated successfully"},
             status=status.HTTP_200_OK
         )
-
 
 
 # ==========================================
