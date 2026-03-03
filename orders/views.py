@@ -458,6 +458,7 @@ class UpcomingEventsView(APIView):
 # ===== FREE CRON TRIGGER =====
 @api_view(["GET"])
 def trigger_reminders(request):
+    import os
     secret = request.GET.get("key")
     cron_key = os.environ.get("CRON_SECRET_KEY")
 
