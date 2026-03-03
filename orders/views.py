@@ -414,7 +414,7 @@ def organizer_advanced_analytics(request):
 
 
 
-    # ==========================================
+# ==========================================
 # UPCOMING EVENTS
 # ==========================================
 class UpcomingEventsView(APIView):
@@ -425,23 +425,25 @@ class UpcomingEventsView(APIView):
 
         orders = (
             Order.objects
+            .select_related("ticket_type__event")
             .filter(
                 user=request.user,
                 status="paid",
-                event__start_date__gt=now
+                ticket_type__event__start_date__gt=now
             )
-            .select_related("event")
-            .order_by("event__start_date")
+            .order_by("ticket_type__event__start_date")
         )
 
         data = []
 
         for order in orders:
+            event = order.ticket_type.event
+
             data.append({
                 "id": order.id,
-                "event_title": order.event.title,
-                "event_start_date": order.event.start_date,
-                "location": order.event.location,
+                "event_title": event.title,
+                "event_start_date": event.start_date,
+                "location": event.location,
                 "ticket_type": order.ticket_type.name,
             })
 
