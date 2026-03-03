@@ -24,7 +24,7 @@ def _refund_allowed(order):
     if now >= cutoff_time:
         return False, "Refund not allowed within 24 hours of the event."
 
-    return True, None
+    return True, None 
 
 
 # =====================================================

@@ -248,7 +248,32 @@ class ProfileView(APIView):
 
     def get(self, request):
         serializer = ProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.data)
+
+    def patch(self, request):
+        user = request.user
+        new_email = request.data.get("email")
+
+        if not new_email:
+            return Response(
+                {"error": "Email is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if User.objects.filter(email=new_email).exclude(id=user.id).exists():
+            return Response(
+                {"error": "Email already in use"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.email = new_email
+        user.is_verified = False  # require re-verification
+        user.save()
+
+        return Response(
+            {"message": "Email updated. Please verify again."},
+            status=status.HTTP_200_OK
+        )
 
 
         # ==========================================

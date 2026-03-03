@@ -1,20 +1,24 @@
-import os
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
+from django.core.mail import send_mail
+from django.conf import settings
 
 
-def send_email(to_email, subject, message):
-    api_key = os.getenv("SENDGRID_API_KEY")
+class TestEmailView(APIView):
+    permission_classes = [AllowAny]
 
-    if not api_key:
-        raise Exception("SENDGRID_API_KEY is missing")
+    def get(self, request):
+        try:
+            send_mail(
+                subject="Sirheart Test Email",
+                message="Hello Sirheart, this is a test email from your backend.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[settings.DEFAULT_FROM_EMAIL],
+                fail_silently=False,
+            )
 
-    mail = Mail(
-        from_email="Sirheart Events <noreply@sirheartevents.com>",
-        to_emails=to_email,
-        subject=subject,
-        plain_text_content=message,
-    )
+            return Response({"message": "✅ Test email sent successfully!"})
 
-    sg = SendGridAPIClient(api_key)
-    sg.send(mail)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
