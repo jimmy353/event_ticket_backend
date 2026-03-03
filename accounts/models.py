@@ -3,6 +3,7 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from django.utils import timezone
 from datetime import timedelta
 import random
+from django.conf import settings
 
 
 class UserManager(BaseUserManager):
@@ -152,3 +153,53 @@ class OrganizerSettings(models.Model):
 
     def __str__(self):
         return f"{self.user.email} Organizer Settings"
+
+
+
+
+
+
+class PushToken(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="push_tokens"
+    )
+    token = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "token")
+
+    def __str__(self):
+        return f"{self.user.email} - {self.token}"
+
+
+class PushLog(models.Model):
+    REMINDER_TYPES = (
+        ("24h", "24 Hours Before"),
+        ("1h", "1 Hour Before"),
+        ("marketing", "Marketing"),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE
+    )
+    event = models.ForeignKey(
+        "events.Event",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True
+    )
+    reminder_type = models.CharField(max_length=20, choices=REMINDER_TYPES)
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "event", "reminder_type")
+
+
+class MarketingPush(models.Model):
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)        
