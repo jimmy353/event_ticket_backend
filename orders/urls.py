@@ -8,6 +8,7 @@ from .views import (
     organizer_approve_refund,
     organizer_dashboard_stats,
     organizer_advanced_analytics,
+    UpcomingEventsView
 )
 
 urlpatterns = [
@@ -24,4 +25,5 @@ urlpatterns = [
     path("organizer/orders/", organizer_orders),
     path("organizer/dashboard/", organizer_dashboard_stats),
     path("organizer/advanced-analytics/", organizer_advanced_analytics),
+    path("upcoming/", UpcomingEventsView.as_view()),
 ]
