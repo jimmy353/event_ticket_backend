@@ -1,5 +1,4 @@
 from django.urls import path
-from rest_framework.views import APIView
 from .views import (
     create_order,
     my_orders,
@@ -10,6 +9,7 @@ from .views import (
     organizer_dashboard_stats,
     organizer_advanced_analytics,
     UpcomingEventsView,
+    trigger_reminders,
 )
 
 urlpatterns = [
@@ -27,4 +27,5 @@ urlpatterns = [
     path("organizer/dashboard/", organizer_dashboard_stats),
     path("organizer/advanced-analytics/", organizer_advanced_analytics),
     path("upcoming/", UpcomingEventsView.as_view()),
+    path("run-reminders/", trigger_reminders),
 ]

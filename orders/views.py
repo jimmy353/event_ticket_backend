@@ -448,3 +448,20 @@ class UpcomingEventsView(APIView):
             })
 
         return Response(data)
+
+
+
+# ===== FREE CRON TRIGGER =====
+@api_view(["GET"])
+def trigger_reminders(request):
+    secret = request.GET.get("key")
+
+    if secret != settings.CRON_SECRET_KEY:
+        return Response(
+            {"error": "Unauthorized"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    send_event_reminders()
+
+    return Response({"status": "reminders executed"})
