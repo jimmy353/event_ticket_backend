@@ -10,6 +10,8 @@ from .views import (
     OrganizerRequestView,
     OrganizerSettingsView,
     ChangePasswordView,
+    save_push_token,
+    send_marketing_push,
 )
 
 urlpatterns = [
@@ -24,6 +26,9 @@ urlpatterns = [
 
     path("profile/", ProfileView.as_view()),
     path("change-password/", ChangePasswordView.as_view()),
+
+    path("save-push-token/", save_push_token),
+    path("marketing-push/", send_marketing_push),
 
     # WEB ONLY
     path("organizer-request/", OrganizerRequestView.as_view()),

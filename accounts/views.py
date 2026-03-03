@@ -13,6 +13,10 @@ from django.utils import timezone
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
+from rest_framework.decorators import api_view, permission_classes
+from .models import PushToken, MarketingPush, PushLog
+from utils.push import send_expo_push
+
 from .serializers import (
     RegisterSerializer,
     ProfileSerializer,
@@ -335,39 +339,6 @@ class ChangePasswordView(APIView):
         )
 
 
-# ==========================================
-# UPCOMING EVENTS
-# ==========================================
-class UpcomingEventsView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        now = timezone.now()
-
-        orders = (
-            Order.objects
-            .filter(
-                user=request.user,
-                status="paid",
-                event__start_date__gt=now
-            )
-            .select_related("event")
-            .order_by("event__start_date")
-        )
-
-        data = []
-
-        for order in orders:
-            data.append({
-                "id": order.id,
-                "event_title": order.event.title,
-                "event_start_date": order.event.start_date,
-                "location": order.event.location,
-                "ticket_type": order.ticket_type.name,
-            })
-
-        return Response(data)
-
 
 # ==========================================
 # ORGANIZER REQUEST (WEB DASHBOARD)
@@ -543,3 +514,53 @@ class ResetPasswordView(APIView):
         otp_obj.save(update_fields=["is_used"])
 
         return Response({"message": "Password reset successful."})
+
+
+
+# ==========================================
+# SAVE PUSH TOKEN
+# ==========================================
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def save_push_token(request):
+    token = request.data.get("token")
+
+    if not token:
+        return Response({"error": "Token required"}, status=400)
+
+    PushToken.objects.get_or_create(
+        user=request.user,
+        token=token
+    )
+
+    return Response({"message": "Push token saved"})
+
+
+
+# ==========================================
+# MARKETING PUSH
+# ==========================================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_marketing_push(request):
+
+    if not request.user.is_organizer:
+        return Response({"error": "Only organizers allowed"}, status=403)
+
+    title = request.data.get("title")
+    message = request.data.get("message")
+
+    if not title or not message:
+        return Response({"error": "Title and message required"}, status=400)
+
+    tokens = PushToken.objects.all().values_list("token", flat=True)
+
+    send_expo_push(tokens, title, message)
+
+    MarketingPush.objects.create(
+        title=title,
+        message=message
+    )
+
+    return Response({"message": "Marketing push sent"})    
