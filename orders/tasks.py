@@ -10,51 +10,31 @@ def send_event_reminders():
 
     orders = (
         Order.objects
-        .filter(status="paid")
+        .filter(
+            status="paid",
+            ticket_type__event__start_date__gt=now
+        )
         .select_related("ticket_type__event", "user")
     )
 
     for order in orders:
         event = order.ticket_type.event
+
+        if not event or not event.start_date:
+            continue
+
         event_time = event.start_date
+
+        # Ensure timezone-aware comparison
+        if timezone.is_naive(event_time):
+            event_time = timezone.make_aware(event_time)
+
         time_left = event_time - now
 
-        # 24 hours
+        # 24 hour reminder window
         if timedelta(hours=23, minutes=50) < time_left <= timedelta(hours=24):
             send_reminder(order, event, "24h")
 
-        # 1 hour
-        if timedelta(minutes=50) < time_left <= timedelta(hours=1):
+        # 1 hour reminder window
+        elif timedelta(minutes=50) < time_left <= timedelta(hours=1):
             send_reminder(order, event, "1h")
-
-
-def send_reminder(order, event, reminder_type):
-
-    already_sent = PushLog.objects.filter(
-        user=order.user,
-        event=event,
-        reminder_type=reminder_type
-    ).exists()
-
-    if already_sent:
-        return
-
-    tokens = PushToken.objects.filter(
-        user=order.user
-    ).values_list("token", flat=True)
-
-    if not tokens:
-        return
-
-    if reminder_type == "24h":
-        body = f"{event.title} starts in 24 hours!"
-    else:
-        body = f"{event.title} starts in 1 hour!"
-
-    send_expo_push(tokens, "Event Reminder 🔔", body)
-
-    PushLog.objects.create(
-        user=order.user,
-        event=event,
-        reminder_type=reminder_type
-    )
