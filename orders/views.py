@@ -458,18 +458,16 @@ class UpcomingEventsView(APIView):
 # ===== FREE CRON TRIGGER =====
 @api_view(["GET"])
 def trigger_reminders(request):
-    try:
-        send_event_reminders()
-        return Response({"status": "executed"})
-    except Exception as e:
-        return Response({"error": str(e)}, status=500)
+    secret = request.GET.get("key")
 
-    if secret != settings.CRON_SECRET_KEY:
-        return Response(
-            {"error": "Unauthorized"},
-            status=status.HTTP_403_FORBIDDEN
-        )
+    cron_key = getattr(settings, "CRON_SECRET_KEY", None)
+
+    if not cron_key:
+        return Response({"error": "Cron not configured"}, status=500)
+
+    if secret != cron_key:
+        return Response({"error": "Unauthorized"}, status=403)
 
     send_event_reminders()
 
-    return Response({"status": "reminders executed"})
+    return Response({"status": "executed"})
