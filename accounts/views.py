@@ -10,6 +10,7 @@ from django.conf import settings
 
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+from django.contrib.auth.password_validation import validate_password
 
 from .serializers import (
     RegisterSerializer,
@@ -286,6 +287,48 @@ class ProfileView(APIView):
 
         return Response(
             {"message": "Email updated. Please verify your new email."},
+            status=status.HTTP_200_OK
+        )
+
+
+
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        user = request.user
+
+        current_password = request.data.get("current_password")
+        new_password = request.data.get("new_password")
+        confirm_password = request.data.get("confirm_password")
+
+        if not current_password or not new_password or not confirm_password:
+            return Response(
+                {"error": "All fields are required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not user.check_password(current_password):
+            return Response(
+                {"error": "Current password is incorrect"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if new_password != confirm_password:
+            return Response(
+                {"error": "New passwords do not match"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        validate_password(new_password, user)
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response(
+            {"message": "Password updated successfully"},
             status=status.HTTP_200_OK
         )
 

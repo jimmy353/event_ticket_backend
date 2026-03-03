@@ -9,6 +9,7 @@ from .views import (
     ProfileView,
     OrganizerRequestView,
     OrganizerSettingsView,
+    ChangePasswordView,
 )
 
 urlpatterns = [
@@ -22,6 +23,7 @@ urlpatterns = [
     path("reset-password/", ResetPasswordView.as_view()),
 
     path("profile/", ProfileView.as_view()),
+    path("change-password/", ChangePasswordView.as_view()),
 
     # WEB ONLY
     path("organizer-request/", OrganizerRequestView.as_view()),
