@@ -248,30 +248,44 @@ class ProfileView(APIView):
 
     def get(self, request):
         serializer = ProfileSerializer(request.user)
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request):
         user = request.user
-        new_email = request.data.get("email")
 
-        if not new_email:
+        email = request.data.get("email")
+
+        if not email:
             return Response(
                 {"error": "Email is required"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if User.objects.filter(email=new_email).exclude(id=user.id).exists():
+        # prevent duplicate emails
+        if User.objects.filter(email=email).exclude(id=user.id).exists():
             return Response(
                 {"error": "Email already in use"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        user.email = new_email
-        user.is_verified = False  # require re-verification
-        user.save()
+        user.email = email
+        user.is_verified = False  # force re-verify if email changes
+        user.save(update_fields=["email", "is_verified"])
+
+        # delete old verify OTP
+        EmailOTP.objects.filter(
+            email=email,
+            purpose="verify",
+            is_used=False
+        ).delete()
+
+        EmailOTP.objects.create(
+            email=email,
+            purpose="verify"
+        )
 
         return Response(
-            {"message": "Email updated. Please verify again."},
+            {"message": "Email updated. Please verify your new email."},
             status=status.HTTP_200_OK
         )
 
