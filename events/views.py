@@ -4,6 +4,9 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework import status
 
+from accounts.models import PushToken
+from utils.push import send_expo_push
+
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 
@@ -13,6 +16,10 @@ from .serializers import (
     OrganizerEventSerializer,
     EventCreateSerializer,
 )
+
+# 🔔 PUSH IMPORTS
+from accounts.models import PushToken
+from utils.push import send_expo_push
 
 
 # ==========================================
@@ -39,10 +46,10 @@ class OrganizerEventListAPIView(APIView):
 
     def get(self, request):
         events = (
-          Event.objects
-          .filter(organizer=request.user)
-          .order_by("-start_date")
-    )
+            Event.objects
+            .filter(organizer=request.user)
+            .order_by("-start_date")
+        )
 
         serializer = OrganizerEventSerializer(
             events,
@@ -69,8 +76,22 @@ class OrganizerCreateEventAPIView(APIView):
 
         if serializer.is_valid():
             event = serializer.save(
-                organizer=request.user   # 🔥 CRITICAL
+                organizer=request.user
             )
+
+            # ==========================================
+            # 🔔 PUSH NOTIFICATION FOR NEW EVENT
+            # ==========================================
+            tokens = list(
+                PushToken.objects.values_list("token", flat=True)
+            )
+
+            if tokens:
+                send_expo_push(
+                    tokens,
+                    "🎉 New Event",
+                    f"{event.title} is now live. Get your tickets!"
+                )
 
             return Response(
                 OrganizerEventSerializer(
@@ -97,7 +118,7 @@ class OrganizerEventDetailAPIView(APIView):
         return get_object_or_404(
             Event,
             pk=pk,
-            organizer=request.user   # 🔥 SECURITY
+            organizer=request.user
         )
 
     def get(self, request, pk):
