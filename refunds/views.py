@@ -235,15 +235,17 @@ def my_refunds(request):
 
     for refund in refunds:
 
-    event_title = "Unknown Event"
+        event_title = "Unknown Event"
 
-    if refund.order and refund.order.ticket_type and refund.order.ticket_type.event:
-        event_title = refund.order.ticket_type.event.title
+        if refund.order and refund.order.ticket_type and refund.order.ticket_type.event:
+            event_title = refund.order.ticket_type.event.title
 
-    data.append({
-        "id": refund.id,
-        "event_title": event_title,
-        "amount": refund.order.total_amount if refund.order else 0,
-        "status": refund.status,
-        "created_at": refund.created_at,
-    })
+        data.append({
+            "id": refund.id,
+            "event_title": event_title,
+            "amount": refund.order.total_amount if refund.order else 0,
+            "status": refund.status,
+            "created_at": refund.created_at,
+        })
+
+    return Response(data)
