@@ -228,7 +228,7 @@ def my_refunds(request):
         Refund.objects
         .select_related("order__ticket_type__event")
         .filter(order__user=request.user)
-        .order_by("-created_at")
+        .order_by("-requested_at")
     )
 
     data = []
@@ -243,9 +243,9 @@ def my_refunds(request):
         data.append({
             "id": refund.id,
             "event_title": event_title,
-            "amount": refund.order.total_amount if refund.order else 0,
+            "amount": refund.amount,   # use refund amount
             "status": refund.status,
-            "created_at": refund.created_at,
+            "created_at": refund.requested_at,  # FIX HERE
         })
 
     return Response(data)
