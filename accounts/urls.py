@@ -12,6 +12,7 @@ from .views import (
     ChangePasswordView,
     save_push_token,
     send_marketing_push,
+    push_new_event,
 )
 
 urlpatterns = [
@@ -29,6 +30,7 @@ urlpatterns = [
 
     path("save-push-token/", save_push_token),
     path("marketing-push/", send_marketing_push),
+    path("push/event-created/", push_new_event),
 
     # WEB ONLY
     path("organizer-request/", OrganizerRequestView.as_view()),

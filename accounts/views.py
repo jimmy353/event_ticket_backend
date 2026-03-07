@@ -563,4 +563,37 @@ def send_marketing_push(request):
         message=message
     )
 
-    return Response({"message": "Marketing push sent"})    
+    return Response({"message": "Marketing push sent"})  
+
+
+
+# ==========================================
+# EVENT CREATED PUSH
+# ==========================================
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def push_new_event(request):
+
+    if not request.user.is_organizer:
+        return Response(
+            {"error": "Only organizers allowed"},
+            status=403
+        )
+
+    event_title = request.data.get("title")
+
+    if not event_title:
+        return Response(
+            {"error": "Event title required"},
+            status=400
+        )
+
+    tokens = PushToken.objects.all().values_list("token", flat=True)
+
+    title = "New Event 🎉"
+    message = f"{event_title} is now live. Get your tickets!"
+
+    send_expo_push(tokens, title, message)
+
+    return Response({"message": "Event push sent"})  
+
