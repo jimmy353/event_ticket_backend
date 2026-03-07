@@ -215,3 +215,31 @@ def admin_mark_refund_paid(request, refund_id):
         "message": "Refund marked as paid.",
         "status": refund.status,
     })
+
+
+
+# ================= USER REFUND UPDATES =================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_refunds(request):
+
+    refunds = (
+        Refund.objects
+        .select_related("order__ticket_type__event")
+        .filter(order__user=request.user)
+        .order_by("-created_at")
+    )
+
+    data = []
+
+    for refund in refunds:
+        data.append({
+            "id": refund.id,
+            "event_title": refund.order.ticket_type.event.title,
+            "amount": refund.order.total_amount,
+            "status": refund.status,
+            "created_at": refund.created_at,
+        })
+
+    return Response(data)

@@ -4,6 +4,7 @@ from .views import (
     organizer_refunds,
     admin_approve_refund,
     admin_mark_refund_paid,
+    my_refunds,
 )
 
 urlpatterns = [
@@ -11,4 +12,5 @@ urlpatterns = [
     path("organizer/", organizer_refunds),
     path("admin/<int:refund_id>/approve/", admin_approve_refund),
     path("admin/<int:refund_id>/mark-paid/", admin_mark_refund_paid),
+    path("my/", my_refunds),
 ]
