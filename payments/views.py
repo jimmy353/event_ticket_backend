@@ -248,7 +248,6 @@ def get_saved_payments(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_saved_payment(request):
-
     phone = request.data.get("phone_number") or request.data.get("phone")
     provider = request.data.get("provider")
 
@@ -260,22 +259,21 @@ def add_saved_payment(request):
 
     provider = provider.upper()
 
+    has_default = SavedPaymentMethod.objects.filter(
+        user=request.user,
+        is_default=True
+    ).exists()
+
     saved_payment, created = SavedPaymentMethod.objects.get_or_create(
         user=request.user,
         phone_number=phone,
         defaults={
             "provider": provider,
-            "is_default": True
+            "is_default": not has_default
         }
     )
 
-    if created:
-        SavedPaymentMethod.objects.filter(
-            user=request.user
-        ).exclude(id=saved_payment.id).update(is_default=False)
-
     serializer = SavedPaymentSerializer(saved_payment)
-
     return Response(serializer.data, status=201)
 
 
