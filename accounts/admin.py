@@ -112,16 +112,20 @@ class MarketingPushAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 
-        tokens = list(
-            PushToken.objects.values_list("token", flat=True)
-        )
-
-        if tokens:
-            send_expo_push(
-                tokens,
-                obj.title,
-                obj.message
+        try:
+            tokens = list(
+                PushToken.objects.values_list("token", flat=True)
             )
+
+            if tokens:
+                send_expo_push(
+                    tokens,
+                    obj.title,
+                    obj.message
+                )
+
+        except Exception as e:
+            print("Marketing push failed:", e)
 
 
 # ======================================
