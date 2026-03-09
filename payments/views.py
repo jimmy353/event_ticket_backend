@@ -260,7 +260,9 @@ def organizer_payments(request):
 @permission_classes([IsAuthenticated])
 def get_saved_payments(request):
 
-    payments = SavedPaymentMethod.objects.filter(user=request.user)
+    payments = SavedPaymentMethod.objects.filter(
+        user=request.user
+    ).order_by("-created_at")
 
     serializer = SavedPaymentSerializer(payments, many=True)
 
@@ -270,16 +272,62 @@ def get_saved_payments(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_saved_payment(request):
+    """
+    Save a user's mobile money number.
 
-    serializer = SavedPaymentSerializer(data=request.data)
+    Accepts:
+    {
+        "provider": "momo" or "mgurush",
+        "phone_number": "0922458583"
+    }
 
-    if serializer.is_valid():
+    Also supports:
+    {
+        "provider": "momo",
+        "phone": "0922458583"
+    }
+    """
 
-        serializer.save(user=request.user)
+    data = request.data.copy()
 
-        return Response(serializer.data)
+    # support both phone and phone_number
+    phone = data.get("phone_number") or data.get("phone")
+    provider = data.get("provider")
 
-    return Response(serializer.errors, status=400)
+    if not phone:
+        return Response(
+            {"error": "phone_number required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if not provider:
+        return Response(
+            {"error": "provider required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # normalize provider
+    provider = provider.upper()
+
+    # check existing number
+    saved_payment, created = SavedPaymentMethod.objects.get_or_create(
+        user=request.user,
+        phone_number=phone,
+        defaults={
+            "provider": provider,
+            "is_default": True
+        }
+    )
+
+    # if newly created, ensure only one default
+    if created and saved_payment.is_default:
+        SavedPaymentMethod.objects.filter(
+            user=request.user
+        ).exclude(id=saved_payment.id).update(is_default=False)
+
+    serializer = SavedPaymentSerializer(saved_payment)
+
+    return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 # ===============================
