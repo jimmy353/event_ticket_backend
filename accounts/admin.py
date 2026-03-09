@@ -109,6 +109,20 @@ class PushTokenAdmin(admin.ModelAdmin):
 class MarketingPushAdmin(admin.ModelAdmin):
     list_display = ("title", "message", "created_at")
 
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        tokens = list(
+            PushToken.objects.values_list("token", flat=True)
+        )
+
+        if tokens:
+            send_expo_push(
+                tokens,
+                obj.title,
+                obj.message
+            )
+
 
 # ======================================
 # PUSH LOG
