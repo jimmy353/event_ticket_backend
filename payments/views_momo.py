@@ -6,6 +6,10 @@ from rest_framework import status
 
 from .momo_service import MoMoService
 
+# 🔔 PUSH IMPORTS
+from accounts.models import PushToken
+from utils.push import send_expo_push
+
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -48,7 +52,25 @@ def momo_check_status(request, reference_id):
     Check MoMo payment status
     """
     try:
+
         result = MoMoService.get_payment_status(reference_id)
+
+        # 🔔 SEND PUSH NOTIFICATION IF PAYMENT SUCCESSFUL
+        if result.get("status") == "SUCCESSFUL":
+
+            tokens = list(
+                PushToken.objects
+                .filter(user=request.user)
+                .values_list("token", flat=True)
+            )
+
+            if tokens:
+                send_expo_push(
+                    tokens,
+                    "Payment Confirmed 💳",
+                    "Your ticket payment was successful. Your ticket is ready!"
+                )
+
         return Response(result)
 
     except Exception as e:

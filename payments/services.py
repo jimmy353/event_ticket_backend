@@ -7,6 +7,9 @@ from payments.models import Payment
 from tickets.models import TicketType
 from wallets.models import OrganizerWallet
 
+from accounts.models import PushToken
+from utils.push import send_expo_push
+
 
 COMMISSION_RATE = Decimal("0.10")
 
@@ -68,3 +71,21 @@ def purchase_tickets(user, event, items):
     wallet.save(update_fields=["locked_balance"])
 
     return order
+
+
+
+
+def send_payment_confirmation(user, event_title):
+    
+    tokens = list(
+        PushToken.objects
+        .filter(user=user)
+        .values_list("token", flat=True)
+    )
+
+    if tokens:
+        send_expo_push(
+            tokens,
+            "Payment Confirmed 💳",
+            f"Your payment for {event_title} was successful. Your ticket is ready!"
+        )

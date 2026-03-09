@@ -10,6 +10,8 @@ def send_expo_push(tokens, title, body):
             "sound": "default",
             "title": title,
             "body": body,
+            "priority": "high",
+            "chanelId": "default",
         })
 
     response = requests.post(

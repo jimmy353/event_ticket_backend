@@ -83,8 +83,10 @@ class OrganizerCreateEventAPIView(APIView):
             # 🔔 PUSH NOTIFICATION FOR NEW EVENT
             # ==========================================
             tokens = list(
-                PushToken.objects.values_list("token", flat=True)
-            )
+                PushToken.objects
+                .exclude(user=request.user)
+                .values_list("token", flat=True)
+                )
 
             if tokens:
                 send_expo_push(
