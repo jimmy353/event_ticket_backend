@@ -3,6 +3,7 @@ from django.conf import settings
 
 
 class Order(models.Model):
+
     STATUS_CHOICES = (
         ("pending", "Pending"),
         ("paid", "Paid"),
@@ -34,14 +35,15 @@ class Order(models.Model):
         default="pending"
     )
 
-    is_withdrawn = models.BooleanField(
-        default=False)
+    is_withdrawn = models.BooleanField(default=False)
 
-    # ✅ Correct position
     momo_reference_id = models.CharField(max_length=100, blank=True, null=True)
     payment_status = models.CharField(max_length=20, default="PENDING")
     payment_method = models.CharField(max_length=30, default="MOMO")
     financial_transaction_id = models.CharField(max_length=100, blank=True, null=True)
+
+    # 🔔 Prevent duplicate push notifications
+    notification_sent = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

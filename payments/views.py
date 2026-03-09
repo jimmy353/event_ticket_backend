@@ -1,10 +1,11 @@
-# payments/views.py
-
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
+
+from .models import SavedPaymentMethod
+from .serializers import SavedPaymentSerializer
 
 from orders.models import Order
 from .models import Payment
@@ -24,7 +25,7 @@ def initiate_payment(request):
     {
         "order_id": 1,
         "provider": "momo" or "mgurush",
-        "phone": "0922458583"
+        "phone_number": "0922458583"
     }
     """
 
@@ -48,6 +49,7 @@ def initiate_payment(request):
         return Response({"error": "phone_number required"}, status=status.HTTP_400_BAD_REQUEST)
 
     with transaction.atomic():
+
         try:
             order = (
                 Order.objects
@@ -58,8 +60,11 @@ def initiate_payment(request):
         except Order.DoesNotExist:
             return Response({"error": "Order not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # ✅ If already paid, return existing tickets
+        # ===============================
+        # ORDER ALREADY PAID
+        # ===============================
         if order.status == "paid":
+
             latest_tickets = (
                 Ticket.objects
                 .filter(user=request.user, ticket_type=order.ticket_type)
@@ -74,7 +79,8 @@ def initiate_payment(request):
                     "tickets": [
                         {
                             "ticket_code": str(t.ticket_code),
-                            "qr_code": request.build_absolute_uri(t.qr_code.url) if t.qr_code else None,
+                            "qr_code": request.build_absolute_uri(t.qr_code.url)
+                            if t.qr_code else None,
                         }
                         for t in reversed(list(latest_tickets))
                     ],
@@ -82,7 +88,9 @@ def initiate_payment(request):
                 status=status.HTTP_200_OK,
             )
 
-        # lock ticket type
+        # ===============================
+        # CHECK TICKET AVAILABILITY
+        # ===============================
         ticket_type = (
             order.ticket_type.__class__.objects
             .select_for_update()
@@ -90,13 +98,16 @@ def initiate_payment(request):
         )
 
         available = ticket_type.quantity_total - ticket_type.quantity_sold
+
         if order.quantity > available:
             return Response(
                 {"error": f"Only {available} tickets available"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # ✅ Create payment record
+        # ===============================
+        # CREATE PAYMENT RECORD
+        # ===============================
         payment = Payment.objects.create(
             order=order,
             provider=provider,
@@ -105,9 +116,21 @@ def initiate_payment(request):
             status="pending",
         )
 
-        # ===========================
+        # ===============================
+        # AUTO SAVE PAYMENT METHOD
+        # ===============================
+        SavedPaymentMethod.objects.get_or_create(
+            user=request.user,
+            phone_number=phone_number,
+            defaults={
+                "provider": provider.upper(),
+                "is_default": True
+            }
+        )
+
+        # ===============================
         # SIMULATE PAYMENT SUCCESS
-        # ===========================
+        # ===============================
         payment.status = "success"
         payment.save(update_fields=["status"])
 
@@ -116,24 +139,31 @@ def initiate_payment(request):
         order.payment_method = provider.upper()
         order.save(update_fields=["status", "payment_status", "payment_method"])
 
+        # ===============================
+        # UPDATE SOLD TICKETS
+        # ===============================
         ticket_type.quantity_sold += order.quantity
         ticket_type.save(update_fields=["quantity_sold"])
 
+        # ===============================
+        # CREATE TICKETS
+        # ===============================
         created_tickets = []
+
         for _ in range(order.quantity):
-            # ✅ IMPORTANT: link ticket to the order (refund system needs this)
+
             ticket = Ticket.objects.create(
                 user=request.user,
                 ticket_type=ticket_type,
-                order=order,  # 🔥 THIS IS THE FIX
+                order=order,
             )
 
             ticket.qr_code.save(
                 f"{ticket.ticket_code}.png",
                 generate_qr_code(str(ticket.ticket_code))
             )
-            ticket.save()
 
+            ticket.save()
             created_tickets.append(ticket)
 
     return Response(
@@ -145,7 +175,8 @@ def initiate_payment(request):
             "tickets": [
                 {
                     "ticket_code": str(t.ticket_code),
-                    "qr_code": request.build_absolute_uri(t.qr_code.url) if t.qr_code else None,
+                    "qr_code": request.build_absolute_uri(t.qr_code.url)
+                    if t.qr_code else None,
                 }
                 for t in created_tickets
             ],
@@ -160,9 +191,7 @@ def initiate_payment(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def organizer_payments(request):
-    """
-    GET /api/payments/organizer/?event=<event_id>
-    """
+
     event_id = request.GET.get("event")
 
     qs = (
@@ -174,7 +203,7 @@ def organizer_payments(request):
             "order__ticket_type__event"
         )
         .filter(
-            order__ticket_type__event__organizer=request.user,
+            order__ticket_type__event__organizer=request.user
         )
         .order_by("-created_at")
     )
@@ -183,11 +212,12 @@ def organizer_payments(request):
         qs = qs.filter(order__ticket_type__event_id=event_id)
 
     data = []
+
     for p in qs:
+
         order = p.order
         event = order.ticket_type.event
 
-        # ✅ payout/refund status logic (frontend will now update correctly)
         if order.status == "refunded":
             payout_status = "refunded"
         elif order.status == "refund_requested":
@@ -197,9 +227,8 @@ def organizer_payments(request):
         else:
             payout_status = "unpaid"
 
-        # ✅ If order is refunded, still show it (so organizer sees it),
-        # but it will NOT count as withdrawable anymore.
         data.append({
+
             "id": p.id,
             "provider": p.provider,
             "phone": p.phone,
@@ -222,3 +251,53 @@ def organizer_payments(request):
         })
 
     return Response(data, status=status.HTTP_200_OK)
+
+
+# ===============================
+# SAVED PAYMENTS
+# ===============================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_saved_payments(request):
+
+    payments = SavedPaymentMethod.objects.filter(user=request.user)
+
+    serializer = SavedPaymentSerializer(payments, many=True)
+
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def add_saved_payment(request):
+
+    serializer = SavedPaymentSerializer(data=request.data)
+
+    if serializer.is_valid():
+
+        serializer.save(user=request.user)
+
+        return Response(serializer.data)
+
+    return Response(serializer.errors, status=400)
+
+
+# ===============================
+# DEFAULT PAYMENT METHOD
+# ===============================
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_default_payment(request):
+
+    payment = SavedPaymentMethod.objects.filter(
+        user=request.user,
+        is_default=True
+    ).first()
+
+    if not payment:
+        return Response({"phone_number": None})
+
+    return Response({
+        "phone_number": payment.phone_number,
+        "provider": payment.provider
+    })

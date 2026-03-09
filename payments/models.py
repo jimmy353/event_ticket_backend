@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 
 
@@ -17,9 +18,9 @@ class Payment(models.Model):
     )
 
     PAYOUT_STATUS = (
-        ("unpaid", "Unpaid"),          # Earnings available for withdrawal
-        ("pending", "Pending Payout"), # Withdrawal requested
-        ("paid", "Paid Out"),          # Already paid to organizer
+        ("unpaid", "Unpaid"),
+        ("pending", "Pending Payout"),
+        ("paid", "Paid Out"),
     )
 
     # ===============================
@@ -100,3 +101,35 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"Payment #{self.id} - {self.provider} - {self.amount}"
+
+
+# =====================================
+# Saved Payment Method (Separate Model)
+# =====================================
+class SavedPaymentMethod(models.Model):
+
+    PROVIDER_CHOICES = (
+        ("MOMO", "MTN MoMo"),
+        ("MGURUSH", "M-Gurush"),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="saved_payments"
+    )
+
+    provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        default="MOMO"
+    )
+
+    phone_number = models.CharField(max_length=20)
+
+    is_default = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user} - {self.phone_number}"

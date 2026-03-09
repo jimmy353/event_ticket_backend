@@ -28,23 +28,30 @@ from rest_framework.views import APIView
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def create_order(request):
+
     ticket_id = request.data.get("ticket_id")
-    quantity = int(request.data.get("quantity", 1))
+    quantity = request.data.get("quantity", 1)
+
+    try:
+        quantity = int(quantity)
+    except Exception:
+        return Response({"error": "Invalid quantity"}, status=400)
 
     if not ticket_id:
         return Response({"error": "ticket_id required"}, status=400)
 
-    if quantity < 1:
-        return Response({"error": "quantity must be at least 1"}, status=400)
-
     try:
-        ticket = TicketType.objects.select_related("event").get(id=ticket_id)
+        ticket = TicketType.objects.select_related("event").get(pk=ticket_id)
     except TicketType.DoesNotExist:
-        return Response({"error": "Invalid ticket_id"}, status=404)
+        return Response({"error": "Ticket type not found"}, status=404)
 
     available = ticket.quantity_total - ticket.quantity_sold
+
     if quantity > available:
-        return Response({"error": f"Only {available} tickets remaining"}, status=400)
+        return Response(
+            {"error": f"Only {available} tickets remaining"},
+            status=400
+        )
 
     total = ticket.price * Decimal(quantity)
     commission = total * Decimal("0.10")
@@ -63,9 +70,7 @@ def create_order(request):
     return Response({
         "id": order.id,
         "total_amount": float(order.total_amount),
-        "commission_amount": float(order.commission_amount),
-        "organizer_amount": float(order.organizer_amount),
-        "status": order.status,
+        "status": order.status
     }, status=201)
 
 
