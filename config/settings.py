@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_crontab",
 
     # Third party
     "rest_framework",
@@ -65,7 +66,6 @@ INSTALLED_APPS = [
     "wallets.apps.WalletsConfig",
     "payments",
     "payouts",
-    "organizer",
     "refunds",
 ]
 
@@ -134,6 +134,8 @@ else:
         }
     }
 
+
+CRON_SECRET_KEY = os.environ.get("CRON_SECRET_KEY")
 
 # =========================
 # PASSWORD VALIDATION
@@ -263,3 +265,10 @@ MOMO_BASE_URL = os.getenv("MOMO_BASE_URL", "https://sandbox.momodeveloper.mtn.co
 # =========================
 DEFAULT_FROM_EMAIL = "Sirheart Events <noreply@sirheartevents.com>"
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+
+
+
+
+CRONJOBS = [
+    ('0 * * * *', 'utils.event_reminders.send_event_reminders')
+]
