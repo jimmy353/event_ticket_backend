@@ -4,12 +4,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
 
-from .models import SavedPaymentMethod
+from .models import SavedPaymentMethod, Payment
 from .serializers import SavedPaymentSerializer
 
 from orders.models import Order
-from .models import Payment
-
 from tickets.models import Ticket
 from tickets.utils import generate_qr_code
 
@@ -20,14 +18,6 @@ from tickets.utils import generate_qr_code
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def initiate_payment(request):
-    """
-    Expected request body:
-    {
-        "order_id": 1,
-        "provider": "momo" or "mgurush",
-        "phone_number": "0922458583"
-    }
-    """
 
     order_id = request.data.get("order_id")
     provider = request.data.get("provider")
@@ -119,7 +109,7 @@ def initiate_payment(request):
         # ===============================
         # AUTO SAVE PAYMENT METHOD
         # ===============================
-        SavedPaymentMethod.objects.get_or_create(
+        saved_payment, created = SavedPaymentMethod.objects.get_or_create(
             user=request.user,
             phone_number=phone_number,
             defaults={
@@ -127,6 +117,11 @@ def initiate_payment(request):
                 "is_default": True
             }
         )
+
+        if created:
+            SavedPaymentMethod.objects.filter(
+                user=request.user
+            ).exclude(id=saved_payment.id).update(is_default=False)
 
         # ===============================
         # SIMULATE PAYMENT SUCCESS
@@ -192,8 +187,6 @@ def initiate_payment(request):
 @permission_classes([IsAuthenticated])
 def organizer_payments(request):
 
-    event_id = request.GET.get("event")
-
     qs = (
         Payment.objects
         .select_related(
@@ -202,14 +195,9 @@ def organizer_payments(request):
             "order__ticket_type",
             "order__ticket_type__event"
         )
-        .filter(
-            order__ticket_type__event__organizer=request.user
-        )
+        .filter(order__ticket_type__event__organizer=request.user)
         .order_by("-created_at")
     )
-
-    if event_id:
-        qs = qs.filter(order__ticket_type__event_id=event_id)
 
     data = []
 
@@ -218,39 +206,24 @@ def organizer_payments(request):
         order = p.order
         event = order.ticket_type.event
 
-        if order.status == "refunded":
-            payout_status = "refunded"
-        elif order.status == "refund_requested":
-            payout_status = "refund_requested"
-        elif order.is_withdrawn:
-            payout_status = "paid"
-        else:
-            payout_status = "unpaid"
-
         data.append({
-
             "id": p.id,
             "provider": p.provider,
             "phone": p.phone,
             "status": p.status,
             "created_at": p.created_at,
-
             "order_id": order.id,
             "quantity": order.quantity,
             "customer_email": order.user.email if order.user else None,
-
             "ticket_type_name": order.ticket_type.name,
             "event_id": event.id,
             "event_title": event.title,
-
             "amount": float(order.total_amount),
             "commission": float(order.commission_amount),
             "organizer_amount": float(order.organizer_amount),
-
-            "payout_status": payout_status,
         })
 
-    return Response(data, status=status.HTTP_200_OK)
+    return Response(data)
 
 
 # ===============================
@@ -269,47 +242,24 @@ def get_saved_payments(request):
     return Response(serializer.data)
 
 
+# ===============================
+# ADD SAVED PAYMENT
+# ===============================
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_saved_payment(request):
-    """
-    Save a user's mobile money number.
 
-    Accepts:
-    {
-        "provider": "momo" or "mgurush",
-        "phone_number": "0922458583"
-    }
-
-    Also supports:
-    {
-        "provider": "momo",
-        "phone": "0922458583"
-    }
-    """
-
-    data = request.data.copy()
-
-    # support both phone and phone_number
-    phone = data.get("phone_number") or data.get("phone")
-    provider = data.get("provider")
+    phone = request.data.get("phone_number") or request.data.get("phone")
+    provider = request.data.get("provider")
 
     if not phone:
-        return Response(
-            {"error": "phone_number required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "phone_number required"}, status=400)
 
     if not provider:
-        return Response(
-            {"error": "provider required"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        return Response({"error": "provider required"}, status=400)
 
-    # normalize provider
     provider = provider.upper()
 
-    # check existing number
     saved_payment, created = SavedPaymentMethod.objects.get_or_create(
         user=request.user,
         phone_number=phone,
@@ -319,15 +269,14 @@ def add_saved_payment(request):
         }
     )
 
-    # if newly created, ensure only one default
-    if created and saved_payment.is_default:
+    if created:
         SavedPaymentMethod.objects.filter(
             user=request.user
         ).exclude(id=saved_payment.id).update(is_default=False)
 
     serializer = SavedPaymentSerializer(saved_payment)
 
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.data, status=201)
 
 
 # ===============================
@@ -343,9 +292,9 @@ def get_default_payment(request):
     ).first()
 
     if not payment:
-        return Response({"phone_number": None})
+        return Response({})
 
     return Response({
-        "phone_number": payment.phone_number,
+        "phone": payment.phone_number,
         "provider": payment.provider
     })
