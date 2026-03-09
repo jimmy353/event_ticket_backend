@@ -46,7 +46,6 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django_crontab",
 
     # Third party
     "rest_framework",
@@ -265,10 +264,3 @@ MOMO_BASE_URL = os.getenv("MOMO_BASE_URL", "https://sandbox.momodeveloper.mtn.co
 # =========================
 DEFAULT_FROM_EMAIL = "Sirheart Events <noreply@sirheartevents.com>"
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-
-
-
-
-CRONJOBS = [
-    ('0 * * * *', 'utils.event_reminders.send_event_reminders')
-]
